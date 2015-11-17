@@ -1,6 +1,5 @@
 contract ComputationAPI {
     address public verifier;
-    bytes4 public abiSignature;
 }
 
 contract VerifierAPI {
@@ -12,13 +11,16 @@ contract Request {
         VerifierAPI verifier;
         
         // Pending   => (Fullfilled,)
-        // Fullfilled => (Finalized, Pending)
+        // Fullfilled => (Finalized,)
         // Finalized => null
         enum State {
                 Pending,
                 Fullfilled,
                 Finalized
         }
+
+        uint public payment;
+        uint public fee;
 
         bytes public input;
         address public requester;
@@ -38,12 +40,12 @@ contract Request {
             _
         }
 
-        modifier bonded(uint value) {
+        modifier min_ether(uint value) {
             if (msg.value < value) throw;
             _
         }
 
-        function Request(address _requester, bytes _input) {
+        function Request(address _requester, bytes _input, uint payment, uint fee) {
             requester = _requester;
             computation = ComputationAPI(msg.sender);
             verifier = VerifierAPI(computation.verifier());
@@ -51,7 +53,38 @@ contract Request {
             input = _input;
         }
 
-        uint MINIMUM_BOND = 1 ether;
+        function result() 
+            onlystate(State.Finalized)
+            returns (bytes)
+        {
+                if (was_overturned) {
+                    return on_chain_output;
+                }
+                else {
+                    return off_chain_output;
+                }
+        }
+
+        function register_off_chain_output(bytes _output)
+            onlystate(State.Pending)
+            min_ether(block.gaslimit * tx.gasprice + 2 * payment)
+        {
+                bond = msg.value;
+                reporter = msg.sender;
+                off_chain_output = _output;
+                state = State.Fullfilled;
+        }
+
+        function register_on_chain_output()
+            onlystate(State.Fullfilled)
+        {
+            on_chain_output.length = msg.data.length - 4;
+            if (msg.data.length > 4) {
+                    for (uint i = 0; i < on_chain_output.length; i++) {
+                            on_chain_output[i] = msg.data[i + 4];
+                    }
+            }
+        }
 
         function cmp(bytes _a, bytes _b) internal returns (bool) {
             if (_a.length != _b.length) {
@@ -65,10 +98,16 @@ contract Request {
             return true;
         }
 
+        uint CHALLENGE_OVERHEAD = 200000;
+
         function challenge_output()
             onlystate(State.Fullfilled)
-            bonded(MINIMUM_BOND)
+            min_ether(2 * payment)
         {
+                // Must provide enough gas for the function to run it's course.
+                // Should protect against stack depth attack here.
+                if (msg.gas < computation.minimum_gas() + CHALLENGE_OVERHEAD) throw;
+
                 was_challenged = true;
                 verifier.request_output(input);
                 if (cmp(off_chain_output, on_chain_output)) {
@@ -86,38 +125,5 @@ contract Request {
         {
             // TODO: bonds
             state = State.Finalized;
-        }
-
-        function register_off_chain_output(bytes _output)
-            onlystate(State.Pending)
-            bonded(MINIMUM_BOND)
-        {
-                bond = msg.value;
-                reporter = msg.sender;
-                off_chain_output = _output;
-                state = State.Fullfilled;
-        }
-
-        function result() 
-            onlystate(State.Finalized)
-            returns (bytes)
-        {
-                if (was_overturned) {
-                    return on_chain_output;
-                }
-                else {
-                    return off_chain_output;
-                }
-        }
-
-        function register_on_chain_output()
-            onlystate(State.Fullfilled)
-        {
-            on_chain_output.length = msg.data.length - 4;
-            if (msg.data.length > 4) {
-                    for (uint i = 0; i < on_chain_output.length; i++) {
-                            on_chain_output[i] = msg.data[i + 4];
-                    }
-            }
         }
 }
