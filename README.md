@@ -1,5 +1,7 @@
 # Ethereum Computation Marketplace
 
+Credit for this idea goes to [Tal Serphos](https://twitter.com/TalSerphos)
+
 Some computations are too expensive to justify doing them on the blockchain,
 yet may be necessary for certain contracts to operate.  The Ethereum
 Computation Market aims to solve this problem.
