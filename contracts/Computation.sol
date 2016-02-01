@@ -30,6 +30,16 @@ contract ComputationBase {
         return stateHistory[stateHistory.length - 1].isFinal;
     }
 
+    function getState() constant returns (uint, bytes, bytes, bool) {
+        if (stateHistory.length == 0) throw;
+        return getState(stateHistory.length - 1);
+    }
+
+    function getState(uint step) constant returns (uint, bytes, bytes, bool) {
+        var state = stateHistory[step];
+        return (state.step, state.args, state.result, state.isFinal);
+    }
+
     function execute() public {
         /*
          * Execute a single step of the computation.
