@@ -1,63 +1,78 @@
 contract ComputationBase {
-    bytes public input;
-    bytes public output;
-
-    struct State {
-        uint step;
-        bytes args;
+    struct Answer {
+        uint id;
+        address submitter;
         bytes result;
-        bool isFinal;
+        uint createdAt;
     }
 
-    State[] stateHistory;
-
-    // Must implement this function.
-    function step(uint step, bytes args) constant returns (bytes result, bool isFinal);
-
-    function step(bytes args, State storage next) internal {
-        // record the in-bytes for this step
-        next.args = args;
-
-        (next.result, next.isFinal) = step(next.step, args);
-
-        if (next.isFinal) {
-            output = next.result;
-        }
+    struct Request {
+        uint id;
+        bytes args;
+        uint createdAt;
+        uint finalAnswer;
+        Answer[] answers;
+        mapping (bytes32 => bool) seen;
     }
 
-    function isFinal() constant returns(bool) {
-        if (stateHistory.length == 0) return false;
-        return stateHistory[stateHistory.length - 1].isFinal;
+    // Request a computation to be done.
+    function requestExecution(bytes args) public returns (uint);
+
+    // Submit an answer to a requested computation.
+    function answerRequest(uint id, bytes result) public returns (uint);
+
+    // Challenge an answer
+    function challengeAnswer(uint requestId, uint answerIdx, bytes result) public;
+
+    /*
+     * Resolve a request
+     *
+     * Finalizes an answered computation.
+     */
+    function resolveRequest(uint id) public returns (uint);
+    
+    // Deploy the execution contract.
+    function deployExecution(bytes args) public returns (address);
+}
+
+
+contract Computation is ComputationBase {
+    uint _idx;
+
+    mapping (uint => Request) requests;
+
+    function requestExecution(bytes args) public returns(uint) {
+        _idx += 1;
+
+        var request = requests[_idx];
+
+        request.id = _idx;
+        request.args = args;
+        request.createdAt = block.number;
+
+
+        return _idx;
     }
 
-    function getState() constant returns (uint, bytes, bytes, bool) {
-        if (stateHistory.length == 0) throw;
-        return getState(stateHistory.length - 1);
-    }
+    function answerRequest(uint id, bytes result) public returns (uint) {
+        var request = requests[id];
 
-    function getState(uint step) constant returns (uint, bytes, bytes, bool) {
-        var state = stateHistory[step];
-        return (state.step, state.args, state.result, state.isFinal);
-    }
+        // invalid request id.
+        if (request.id == 0) throw;
 
-    function execute() public {
-        /*
-         * Execute a single step of the computation.
-         */
-        if (isFinal()) throw;
-        var next = State({
-            step: stateHistory.length,
-            args: "",
-            result: "",
-            isFinal: false
+        var resultHash = sha3(result);
+
+        // this answer has already been submitted.
+        if (request.seen[resultHash]) throw;
+
+        var answer = Answer({
+            id: request.answers.length,
+            submitter: msg.sender,
+            result: result,
+            createdAt: now
         });
-        stateHistory.push(next);
+        request.seen[resultHash] = true;
 
-        if (next.step == 0) {
-            step(input, stateHistory[next.step]);
-        }
-        else {
-            step(stateHistory[next.step - 1].result, stateHistory[next.step]);
-        }
+        return answer.id;
     }
 }

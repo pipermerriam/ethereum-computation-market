@@ -1,7 +1,9 @@
-import {ComputationBase} from "contracts/Computation.sol";
+import {Executable} from "contracts/Execution.sol";
+import {DunderBytes} from "libraries/DunderBytes.sol";
+import {DunderUIntToBytes} from "libraries/DunderUInt.sol";
 
 
-contract BuildByteArray is ComputationBase {
+contract BuildByteArray is Executable {
     function BuildByteArray(bytes args) {
         input = args;
     }
@@ -23,29 +25,11 @@ contract BuildByteArray is ComputationBase {
 }
 
 
-contract Fibonacci is ComputationBase {
+contract Fibonacci is Executable, DunderUIntToBytes {
+    using DunderBytes for bytes;
+
     function Fibonacci(bytes args) {
         input = args;
-    }
-
-    function fromBytes(bytes v) constant returns (uint result) {
-        for (uint i = 0; i < v.length; i++) {
-            result += uint(v[i]) * 2 ** (8 * i);
-        }
-        return result;
-    }
-
-    function toBytes(uint v) constant returns (bytes result) {
-        uint len;
-        while (2 ** (8 * len) <= v) {
-            len += 1;
-        }
-        result = new bytes(len);
-        for (uint i = 0; i < len; i++) {
-            result[i] = byte(uint8(v));
-            v /= 0xff;
-        }
-        return result;
     }
 
     function step(uint step, bytes args) constant returns (bytes result, bool isFinal) {
@@ -53,12 +37,14 @@ contract Fibonacci is ComputationBase {
             result = toBytes(1);
         }
         else {
-            var n_1 = fromBytes(stateHistory[step - 1].result);
-            var n_2 = fromBytes(stateHistory[step - 2].result);
+            // TODO: this should not access previous state but should instead
+            // store this state using a longer bytes string at each step.
+            var n_1 = stateHistory[step - 1].result.toUInt();
+            var n_2 = stateHistory[step - 2].result.toUInt();
             result = toBytes(n_1 + n_2);
         }
 
-        isFinal = step >= fromBytes(input);
+        isFinal = step >= input.toUInt();
         return (result, isFinal);
     }
 }
