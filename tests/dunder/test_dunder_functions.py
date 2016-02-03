@@ -30,6 +30,15 @@ def int_to_bytes(int_v):
         (256, "\x00\x01"),
         (255, "\xff"),
         (1, "\x01"),
+        (1597, '=\x06'),
+        (65535, '\xff\xff'),
+        (65536, '\x00\x00\x01'),
+        (514229, '\xb5\xd8\x07'),
+        (259695496911122585, "\x99\xf0'\xb3\xad\x9f\x9a\x03"),
+        (
+            222232244629420445529739893461909967206666939096499764990979600,
+            '\x10.>\xb3!\xe9\x10\xf5u\xe5nH%\nF\xef\xbb{IA\x17\x1a\x9e\xa3K\x8a',
+        ),
     )
 )
 def test_uint_to_bytes(deployed_contracts, bytes_v, uint_v):

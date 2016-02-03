@@ -1,5 +1,8 @@
 contract FactoryInterface {
     function build(bytes args) public returns (address);
+    function _build(bytes args) internal returns (address);
+
+    event Constructed(address addr, bytes32 argsHash);
 
     // return negative number to indicate unknown.
     function totalGas() constant returns (int);
@@ -26,4 +29,19 @@ contract FactoryBase is FactoryInterface {
         compilerVersion = _compilerVersion;
         compilerFlags = _compilerFlags;
     }
+
+    function build(bytes args) public returns (address addr) {
+        addr = _build(args);
+        Constructed(addr, sha3(args));
+        return addr;
+    }
+
+    function totalGas() constant returns (int) { return -1; }
+    function totalGas(uint numSteps) constant returns(int) { return -1; }
+    function totalGas(bytes args) constant returns(int) { return -1; }
+
+    // return negative number to indicate unknown.
+    function stepGas() constant returns (int) { return -1; }
+    function stepGas(uint stepIdx) constant returns (int) { return -1; }
+    function stepGas(uint stepIdx, bytes args) constant returns(int) { return -1; }
 }

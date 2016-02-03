@@ -7,7 +7,7 @@ contract DunderUIntToBytes {
         result = new bytes(len);
         for (uint i = 0; i < len; i++) {
             result[i] = byte(uint8(v));
-            v /= 0xff;
+            v /= 2 ** 8;
         }
         return result;
     }
