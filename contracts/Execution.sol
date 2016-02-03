@@ -1,4 +1,18 @@
-contract Executable {
+contract ExecutableInterface {
+    /*
+     *  Constant getters
+     */
+    function isFinal() constant returns(bool);
+    function getState() constant returns (uint, bytes, bytes, bool);
+
+    // Must implement this function.
+    function step(uint step, bytes args) constant returns (bytes result, bool isFinal);
+
+    function execute() public;
+}
+
+
+contract Executable is ExecutableInterface {
     /*
      *  This is the base class used for on-chain verification of a computation.
      */
@@ -13,9 +27,6 @@ contract Executable {
     }
 
     State[] stateHistory;
-
-    // Must implement this function.
-    function step(uint step, bytes args) constant returns (bytes result, bool isFinal);
 
     function step(bytes args, State storage next) internal {
         // record the in-bytes for this step

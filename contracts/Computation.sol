@@ -1,4 +1,7 @@
-contract ComputationBase {
+import {FactoryInterface} from "contracts/Factory.sol";
+
+
+contract BrokerInterface {
     struct Answer {
         uint id;
         address submitter;
@@ -36,7 +39,13 @@ contract ComputationBase {
 }
 
 
-contract Computation is ComputationBase {
+contract Broker is BrokerInterface {
+    address public factory;
+
+    function Broker(address _factory) {
+        factory = _factory;
+    }
+
     uint _idx;
 
     mapping (uint => Request) requests;
@@ -65,6 +74,9 @@ contract Computation is ComputationBase {
         // this answer has already been submitted.
         if (request.seen[resultHash]) throw;
 
+        // TODO: require deposit big enough for a full computation (from
+        // factory contract)
+
         var answer = Answer({
             id: request.answers.length,
             submitter: msg.sender,
@@ -73,6 +85,20 @@ contract Computation is ComputationBase {
         });
         request.seen[resultHash] = true;
 
+        // TODO: if this is not the first answer then it must come with a
+        // larger deposit than the previous answer.
+
         return answer.id;
+    }
+
+    /*
+     * To resolve a request
+     */
+    function resolveRequest(uint id) public returns (uint);
+    // TODO
+    
+    // Deploy the execution contract.
+    function deployExecution(bytes args) public returns (address) {
+        return FactoryInterface(factory).build(args);
     }
 }

@@ -4,27 +4,22 @@ import math
 
 
 @pytest.fixture
-def deploy_computation_contract(deploy_client):
-    from populus.contracts import (
-        deploy_contract,
-    )
-    from populus.utils import (
-        get_contract_address_from_txn,
+def deploy_computation_contract(deploy_client, contracts):
+    from populus.deployment import (
+        deploy_contracts,
     )
 
     def _deploy_computation_contract(ContractClass, input_bytes):
-        deploy_txn_hash = deploy_contract(
-            deploy_client,
-            ContractClass,
-            constructor_args=(
-                input_bytes,
-            ),
-            gas=int(deploy_client.get_max_gas() * 0.95),
+        deployed_contracts = deploy_contracts(
+            deploy_client=deploy_client,
+            contracts=contracts,
+            contracts_to_deploy=[ContractClass.__name__],
+            constructor_args={
+                ContractClass.__name__: (input_bytes,),
+            }
         )
 
-        c_address = get_contract_address_from_txn(deploy_client, deploy_txn_hash, 180)
-        c = ContractClass(c_address, deploy_client)
-        return c
+        return getattr(deployed_contracts, ContractClass.__name__)
     return _deploy_computation_contract
 
 
@@ -32,25 +27,33 @@ deployed_contracts = []
 
 
 def test_build_byte_array(deploy_client, contracts, deploy_computation_contract):
-    arst = deploy_computation_contract(contracts.BuildByteArray, "abc")
+    bba = deploy_computation_contract(contracts.BuildByteArray, "abc")
 
-    assert arst.output() == ''
+    assert bba.output() == ''
 
-    e1_txn_hash = arst.execute()
+    e1_txn_hash = bba.execute()
     e1_txn_receipt = deploy_client.wait_for_transaction(e1_txn_hash)
 
-    assert arst.output() == ''
+    assert bba.output() == ''
 
-    e2_txn_hash = arst.execute()
+    e2_txn_hash = bba.execute()
     e2_txn_receipt = deploy_client.wait_for_transaction(e2_txn_hash)
 
-    assert arst.output() == ''
+    assert bba.output() == ''
 
-    e3_txn_hash = arst.execute()
+    e3_txn_hash = bba.execute()
     e3_txn_receipt = deploy_client.wait_for_transaction(e3_txn_hash)
 
-    assert arst.isFinal() is True
-    assert arst.output() == "\x00\x01\x02"
+    assert bba.isFinal() is True
+    assert bba.output() == "\x00\x01\x02"
+
+
+def int_to_bytes(int_v):
+    len = int(math.ceil(math.log(int_v + 1, 2) / 8))
+    return ''.join(
+        chr((2 ** 8 - 1) & (int_v / 2 ** (8 * i)))
+        for i in range(len)
+    )
 
 
 @pytest.mark.parametrize(
@@ -61,40 +64,16 @@ def test_build_byte_array(deploy_client, contracts, deploy_computation_contract)
     ),
 )
 def test_fibonacci(deploy_client, contracts, deploy_computation_contract, idx, fib_n):
-    def bytes_to_int(bytes_v):
-        return sum(
-            ord(b) * 2 ** (8 * idx)
-            for idx, b in enumerate(bytes_v)
-        )
+    fib = deploy_computation_contract(contracts.Fibonacci, int_to_bytes(idx))
 
-    def int_to_bytes(int_v):
-        len = int(math.ceil(math.log(int_v + 1, 2) / 8))
-        return ''.join(
-            chr((2 ** 8 - 1) & (int_v / 2 ** (8 * i)))
-            for i in range(len)
-        )
+    assert fib.output() == ''
 
-    assert bytes_to_int(int_to_bytes(12345)) == 12345
-    assert bytes_to_int(int_to_bytes(256)) == 256
-    assert bytes_to_int(int_to_bytes(255)) == 255
-
-    assert int_to_bytes(bytes_to_int('aa')) == 'aa'
-    assert int_to_bytes(bytes_to_int('\xff\xff')) == '\xff\xff'
-
-    arst = deploy_computation_contract(contracts.Fibonacci, int_to_bytes(idx))
-
-    assert arst.toBytes(255) == int_to_bytes(255)
-    assert arst.toBytes(256) == int_to_bytes(256)
-    assert arst.toBytes(12345) == int_to_bytes(12345)
-
-    assert arst.fromBytes('aa') == bytes_to_int('aa')
-    assert arst.fromBytes('\xff\xff') == bytes_to_int('\xff\xff')
-
-    assert arst.output() == ''
+    states = []
 
     for _ in range(idx + 1):
-        txn_hash = arst.execute()
+        txn_hash = fib.execute()
         txn_receipt = deploy_client.wait_for_transaction(txn_hash)
+        states.append(fib.getState())
 
-    assert arst.isFinal() is True
-    assert arst.output() == int_to_bytes(fib_n)
+    assert fib.isFinal() is True
+    assert fib.output() == int_to_bytes(fib_n)
