@@ -1,6 +1,6 @@
 import {DunderBytes} from "libraries/DunderBytes.sol";
 import {DunderUIntToBytes} from "libraries/DunderUInt.sol";
-import {Executable} from "contracts/Execution.sol";
+import {StatelessExecutable, ExecutableBase} from "contracts/Execution.sol";
 import {FactoryBase} from "contracts/Factory.sol";
 
 
@@ -10,12 +10,11 @@ contract TestFactory is FactoryBase {
 }
 
 
-contract BuildByteArray is Executable {
-    function BuildByteArray(bytes _input) {
-        input = _input;
+contract BuildByteArray is StatelessExecutable {
+    function BuildByteArray(bytes args) StatelessExecutable(args) {
     }
 
-    function step(uint currentStep, bytes _state) constant returns (bytes result, bool) {
+    function step(uint currentStep, bytes _state) public returns (bytes result, bool) {
         result = new bytes(currentStep == 1 ? 1 : _state.length + 1);
 
         result[result.length - 1] = byte(currentStep);
@@ -38,14 +37,13 @@ contract BuildByteArrayFactory is TestFactory {
 }
 
 
-contract Fibonacci is Executable, DunderUIntToBytes {
+contract Fibonacci is StatelessExecutable, DunderUIntToBytes {
     using DunderBytes for bytes;
 
-    function Fibonacci(bytes _input) {
-        input = _input;
+    function Fibonacci(bytes args) StatelessExecutable(args) {
     }
 
-    function step(uint currentStep, bytes _state) constant returns (bytes result, bool) {
+    function step(uint currentStep, bytes _state) public returns (bytes result, bool) {
         uint i;
         bytes memory fib_n;
 

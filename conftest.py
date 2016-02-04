@@ -28,9 +28,11 @@ def deploy_contract(deploy_client, contracts):
 
 
 @pytest.fixture
-def deploy_broker_contract(contracts, deploy_contract):
+def deploy_broker_contract(contracts, deploy_contract, deploy_client):
     def _deploy_broker_contract(factory_address):
-        return deploy_contract(contracts.Broker, (factory_address,))
+        broker = deploy_contract(contracts.Broker, (factory_address,))
+        assert deploy_client.get_code(broker._meta.address)
+        return broker
     return _deploy_broker_contract
 
 

@@ -1,9 +1,7 @@
 contract ExecutableInterface {
-    /*
-     *  Constant getters
-     */
-    // Must implement this function.
-    function step(uint step, bytes state) constant returns (bytes result, bool isFinal);
+    // Must implement these functions.
+    function step(uint currentStep, bytes _state) public returns (bytes result, bool);
+    function isStateless() constant returns (bool);
 
     function execute() public;
     function executeN() public returns (uint i);
@@ -11,10 +9,19 @@ contract ExecutableInterface {
 }
 
 
-contract Executable is ExecutableInterface {
+contract ExecutableBase is ExecutableInterface {
     /*
      *  This is the base class used for on-chain verification of a computation.
      */
+    function ExecutableBase(bytes _args) {
+        input = _args;
+    }
+
+    bool stateless;
+
+    function isStateless() constant returns (bool) {
+        return stateless;
+    }
 
     // `input` is the initial arguments that will be passed into step-1 of
     // computation.
@@ -83,5 +90,19 @@ contract Executable is ExecutableInterface {
             }
         }
         return i;
+    }
+}
+
+
+contract StatelessExecutable is ExecutableBase {
+    function StatelessExecutable(bytes _args) ExecutableBase(_args) {
+        stateless = true;
+    }
+}
+
+
+contract StatefulExecutable is ExecutableBase {
+    function StatefulExecutable(bytes _args) ExecutableBase(_args) {
+        stateless = false;
     }
 }
