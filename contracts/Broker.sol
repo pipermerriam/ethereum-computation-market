@@ -11,21 +11,30 @@ contract BrokerInterface {
 
     struct Request {
         uint id;
+        address requester;
         bytes args;
+        address executable;
         uint createdAt;
-        uint finalAnswer;
         Answer[] answers;
         mapping (bytes32 => bool) seen;
     }
+
+    /*
+     *  Constant getters
+     */
+    function getRequest(uint id) constant returns (bytes, address, address, uint, uint);
+    function getAnswer(uint requestId, uint idx) constant returns (address, bytes, uint);
+
+    /*
+     *  Events
+     */
+    event Created(uint id, bytes32 argsHash);
 
     // Request a computation to be done.
     function requestExecution(bytes args) public returns (uint);
 
     // Submit an answer to a requested computation.
     function answerRequest(uint id, bytes result) public returns (uint);
-
-    // Challenge an answer
-    function challengeAnswer(uint requestId, uint answerIdx, bytes result) public;
 
     /*
      * Resolve a request
@@ -50,15 +59,39 @@ contract Broker is BrokerInterface {
 
     mapping (uint => Request) requests;
 
-    function requestExecution(bytes args) public returns(uint) {
+    function getRequest(uint id) constant returns (bytes, address, address, uint, uint) {
+        var request = requests[id];
+
+        // invalid id
+        if (request.id == 0) throw;
+
+        return (request.args, request.requester, request.executable, request.createdAt, request.answers.length);
+    }
+
+    function getAnswer(uint requestId, uint idx) constant returns (address, bytes, uint) {
+        var request = requests[requestId];
+
+        // invalid id
+        if (request.id == 0) throw;
+
+        // invalid idx
+        if (idx >= request.answers.length) throw;
+
+        var answer = request.answers[idx];
+
+        return (answer.submitter, answer.result, answer.createdAt);
+    }
+
+    function requestExecution(bytes args) public returns (uint) {
         _idx += 1;
 
         var request = requests[_idx];
-
         request.id = _idx;
+        request.requester = msg.sender;
         request.args = args;
-        request.createdAt = block.number;
+        request.createdAt = now;
 
+        Created(_idx, sha3(args));
 
         return _idx;
     }
@@ -94,7 +127,8 @@ contract Broker is BrokerInterface {
     /*
      * To resolve a request
      */
-    function resolveRequest(uint id) public returns (uint);
+    function resolveRequest(uint id) public returns (uint) {
+    }
     // TODO
     
     // Deploy the execution contract.

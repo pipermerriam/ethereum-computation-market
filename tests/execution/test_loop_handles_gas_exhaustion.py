@@ -20,8 +20,8 @@ def bytes_to_int(bytes_v):
 
 
 def test_gas_exhaustion_is_handled(deploy_client, contracts,
-                                   deploy_computation_contract):
-    fib = deploy_computation_contract(contracts.Fibonacci, int_to_bytes(60))
+                                   deploy_contract):
+    fib = deploy_contract(contracts.Fibonacci, (int_to_bytes(60),))
 
     assert fib.output() == ''
 

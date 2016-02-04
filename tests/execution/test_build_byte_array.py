@@ -1,8 +1,8 @@
 deployed_contracts = []
 
 
-def test_build_byte_array(deploy_client, contracts, deploy_computation_contract):
-    bba = deploy_computation_contract(contracts.BuildByteArray, "abc")
+def test_build_byte_array(deploy_client, contracts, deploy_contract):
+    bba = deploy_contract(contracts.BuildByteArray, ("abc",))
 
     assert bba.output() == ''
 

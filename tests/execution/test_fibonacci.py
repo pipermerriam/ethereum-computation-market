@@ -22,8 +22,8 @@ def int_to_bytes(int_v):
     ),
 )
 def test_fibonacci_single_execution(deploy_client, contracts,
-                                    deploy_computation_contract, idx, fib_n):
-    fib = deploy_computation_contract(contracts.Fibonacci, int_to_bytes(idx))
+                                    deploy_contract, idx, fib_n):
+    fib = deploy_contract(contracts.Fibonacci, (int_to_bytes(idx),))
 
     assert fib.output() == ''
 
@@ -43,8 +43,8 @@ def test_fibonacci_single_execution(deploy_client, contracts,
     ),
 )
 def test_fibonacci_looped_execution(deploy_client, contracts,
-                                    deploy_computation_contract, idx, fib_n):
-    fib = deploy_computation_contract(contracts.Fibonacci, int_to_bytes(idx))
+                                    deploy_contract, idx, fib_n):
+    fib = deploy_contract(contracts.Fibonacci, (int_to_bytes(idx),))
 
     assert fib.output() == ''
 
