@@ -9,12 +9,31 @@ contract BrokerInterface {
         uint createdAt;
     }
 
+    /*
+     *  Status Enum
+     *  - Pending: Created but has no submitted answers.
+     *  - WaitingForResolution: Has exactly one answer.  This answer has not
+     *    been verified or accepted, nor has it been submitted long enough to
+     *    allow the submitter to reclaim their deposit.
+     *  - NeedsResolution: Has more than one answer.  None of the 
+     *  - 
+     */
+    enum Status {
+        Pending,
+        WaitingForResolution,
+        NeedsResolution,
+        Resolving,
+        SoftResolution,
+        FirmResolution
+    }
+
     struct Request {
         uint id;
         address requester;
         bytes args;
         address executable;
         uint createdAt;
+        Status status;
         Answer[] answers;
         mapping (bytes32 => bool) seen;
     }
@@ -22,19 +41,25 @@ contract BrokerInterface {
     /*
      *  Constant getters
      */
-    function getRequest(uint id) constant returns (bytes, address, address, uint, uint);
-    function getAnswer(uint requestId, uint idx) constant returns (address, bytes, uint);
+    function getRequest(uint id) constant returns (bytes32, address, address, uint, uint);
+    function getRequestArgs(uint id) constant returns (bytes);
+    function getAnswer(uint id, uint idx) constant returns (address, bytes32, uint);
+    function getAnswerResult(uint id, uint idx) constant returns (bytes);
 
     /*
      *  Events
      */
     event Created(uint id, bytes32 argsHash);
+    event Answered(uint id, uint idx, bytes32 resultHash);
 
     // Request a computation to be done.
     function requestExecution(bytes args) public returns (uint);
 
     // Submit an answer to a requested computation.
     function answerRequest(uint id, bytes result) public returns (uint);
+
+    // Submitter explicitely accepts and answer
+    function acceptAnswer(uint id, uint idx) public;
 
     /*
      * Resolve a request
@@ -59,27 +84,60 @@ contract Broker is BrokerInterface {
 
     mapping (uint => Request) requests;
 
-    function getRequest(uint id) constant returns (bytes, address, address, uint, uint) {
+    /*
+     *  Internal getters
+     */
+    function _getRequest(uint id) internal returns (Request) {
         var request = requests[id];
 
         // invalid id
         if (request.id == 0) throw;
 
-        return (request.args, request.requester, request.executable, request.createdAt, request.answers.length);
+        return request;
     }
 
-    function getAnswer(uint requestId, uint idx) constant returns (address, bytes, uint) {
-        var request = requests[requestId];
-
-        // invalid id
-        if (request.id == 0) throw;
+    function _getRequestAnswerPair(uint id, uint idx) internal returns (Request, Answer) {
+        var request = _getRequest(id);
 
         // invalid idx
         if (idx >= request.answers.length) throw;
 
         var answer = request.answers[idx];
 
-        return (answer.submitter, answer.result, answer.createdAt);
+        return (request, answer);
+    }
+
+    function _getAnswer(uint id, uint idx) internal returns (Answer) {
+        var (request, answer) = _getRequestAnswerPair(id, idx);
+
+        return answer;
+    }
+
+    /*
+     *  Public getters
+     */
+    function getRequest(uint id) constant returns (bytes32, address, address, uint, uint) {
+        var request = _getRequest(id);
+
+        return (sha3(request.args), request.requester, request.executable, request.createdAt, request.answers.length);
+    }
+
+    function getRequestArgs(uint id) constant returns (bytes) {
+        var request = _getRequest(id);
+
+        return request.args;
+    }
+
+    function getAnswer(uint id, uint idx) constant returns (address, bytes32, uint) {
+        var answer = _getAnswer(id, idx);
+
+        return (answer.submitter, sha3(answer.result), answer.createdAt);
+    }
+
+    function getAnswerResult(uint id, uint idx) constant returns (bytes) {
+        var answer = _getAnswer(id, idx);
+
+        return answer.result;
     }
 
     function requestExecution(bytes args) public returns (uint) {
@@ -97,10 +155,7 @@ contract Broker is BrokerInterface {
     }
 
     function answerRequest(uint id, bytes result) public returns (uint) {
-        var request = requests[id];
-
-        // invalid request id.
-        if (request.id == 0) throw;
+        var request = requests[_getRequest(id).id];
 
         var resultHash = sha3(result);
 
@@ -116,12 +171,24 @@ contract Broker is BrokerInterface {
             result: result,
             createdAt: now
         });
+        request.answers.push(answer);
+
+        // Register this result hash as being seen.
         request.seen[resultHash] = true;
+
+        // Log that a new answer was submitted.
+        Answered(id, answer.id, resultHash);
 
         // TODO: if this is not the first answer then it must come with a
         // larger deposit than the previous answer.
 
         return answer.id;
+    }
+
+    function acceptAnswer(uint id, uint idx) public {
+        var (request, answer) = _getRequestAnswerPair(id, idx);
+
+        // TODO: how does this work?
     }
 
     /*
