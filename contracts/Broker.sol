@@ -51,6 +51,7 @@ contract BrokerInterface {
         uint softResolutionBlocks;
         uint baseGasPrice;
         uint basePayment;
+        uint gasReimbursements;
         Status status;
         Answer initialAnswer;
         Answer challengeAnswer;
@@ -426,6 +427,7 @@ contract Broker is BrokerInterface {
 
     function finalize(uint id) public returns (bytes32) {
         var startGas = msg.gas;
+        address paymentTo;
         var request = requests[_getRequest(id).id];
 
         requireStatus(request, Status.FirmResolution, Status.SoftResolution);
@@ -442,22 +444,41 @@ contract Broker is BrokerInterface {
 
             if (request.initialAnswer.resultHash == request.resultHash) {
                 request.initialAnswer.isVerified = true;
-            }
-
-            if (request.challengeAnswer.resultHash == request.resultHash) {
+                paymentTo = request.initialAnswer.submitter;
+            } else if (request.challengeAnswer.resultHash == request.resultHash) {
                 request.challengeAnswer.isVerified = true;
+                paymentTo = request.challengeAnswer.submitter;
+            } else {
+                // If neither answers are correct the requester gets their
+                // payment back.
+                paymentTo = request.requester;
             }
         }
         else {
             request.result = request.initialAnswer.result;
             request.resultHash = request.initialAnswer.resultHash;
+            paymentTo = request.initialAnswer.submitter;
         }
+
+        paymentTo.sendRobust(request.basePayment);
 
         request.status = Status.Finalized;
 
         // reimburse for the gas that was used.
-        msg.sender.sendRobust(gasScalar(request.baseGasPrice) * tx.gasprice * (msg.gas - startGas + FINALIZE_GAS) / 100);
+        reimburseGas(request, msg.sender, startGas, FINALIZE_GAS);
 
         return request.resultHash;
+    }
+
+    function reimburseGas(Request request, address to, uint startGas, uint extraGas) internal {
+        var gasReimbursement = gasScalar(request.baseGasPrice) * tx.gasprice / 100;
+        gasReimbursement *= (msg.gas - startGas + FINALIZE_GAS);
+
+        if (msg.sender.sendRobust(gasReimbursement)) {
+            request.gasReimbursements += gasReimbursement;
+        }
+    }
+
+    function reclaimDeposit(uint id) {
     }
 }
