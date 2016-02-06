@@ -11,6 +11,7 @@ contract BrokerInterface {
         bytes result;
         bytes32 resultHash;
         uint creationBlock;
+        uint depositAmount;
         bool isVerified;
     }
 
@@ -28,6 +29,8 @@ contract BrokerInterface {
      *    been allowed to reclaim their deposit.
      *  - FirmResolution: This request has an answer which was verified via the
      *    on-chain implementation of the computation.
+     *  - Finalized: This request has a result.  Deposits may now be returned
+     *    and payment issued.
      */
     enum Status {
         Pending,
@@ -81,6 +84,7 @@ contract BrokerInterface {
                                                                      uint creationBlock);
     function getChallengeAnswerResult(uint id) constant returns (bytes);
 
+    function getRequiredDeposit(bytes args) constant returns (uint);
 
     /*
      *  Events
@@ -109,11 +113,14 @@ contract BrokerInterface {
 contract Broker is BrokerInterface {
     FactoryInterface public factory;
 
-    function Broker(address _factory) {
+    function Broker(address _factory, uint _requiredDeposit) {
         factory = FactoryInterface(_factory);
+        requiredDeposit = _requiredDeposit;
     }
 
     uint _id;
+
+    uint requiredDeposit;
 
     mapping (uint => Request) requests;
 
@@ -195,6 +202,15 @@ contract Broker is BrokerInterface {
         }
         else {
             return 200 - 100 * basePrice / (2 * basePrice - tx.gasprice);
+        }
+    }
+
+    function reimburseGas(Request request, address to, uint startGas, uint extraGas) internal {
+        var gasReimbursement = gasScalar(request.baseGasPrice) * tx.gasprice / 100;
+        gasReimbursement *= (msg.gas - startGas + extraGas);
+
+        if (msg.sender.sendRobust(gasReimbursement)) {
+            request.gasReimbursements += gasReimbursement;
         }
     }
 
@@ -285,13 +301,14 @@ contract Broker is BrokerInterface {
         // Already answered
         if (request.initialAnswer.submitter != 0x0) throw;
 
-        // TODO: require deposit big enough for a full computation (from
-        // factory contract)
+        // Insufficient deposit
+        if (msg.value < requiredDeposit) throw;
 
         request.initialAnswer.submitter = msg.sender;
         request.initialAnswer.result = result;
         request.initialAnswer.resultHash = sha3(result);
         request.initialAnswer.creationBlock = block.number;
+        request.initialAnswer.depositAmount = msg.value;
 
         // Update the state
         request.status = Status.WaitingForResolution;
@@ -319,6 +336,9 @@ contract Broker is BrokerInterface {
         // Check status
         requireStatus(request, Status.WaitingForResolution);
 
+        // Insufficient deposit
+        if (msg.value < requiredDeposit) throw;
+
         var resultHash = sha3(result);
 
         // No initial answer
@@ -334,6 +354,7 @@ contract Broker is BrokerInterface {
         request.challengeAnswer.result = result;
         request.challengeAnswer.resultHash = resultHash;
         request.challengeAnswer.creationBlock = block.number;
+        request.challengeAnswer.depositAmount = msg.value;
 
         // Update the state
         request.status = Status.NeedsResolution;
@@ -367,7 +388,7 @@ contract Broker is BrokerInterface {
         request.status = Status.Resolving;
 
         // record the gas that was used.
-        msg.sender.sendRobust(gasScalar(request.baseGasPrice) * tx.gasprice * (msg.gas - startGas + INITIALIZE_DISPUTE_GAS) / 100);
+        reimburseGas(request, msg.sender, startGas, INITIALIZE_DISPUTE_GAS);
 
         return request.executable;
     }
@@ -405,7 +426,7 @@ contract Broker is BrokerInterface {
         }
 
         // reimburse for the gas that was used.
-        msg.sender.sendRobust(gasScalar(request.baseGasPrice) * tx.gasprice * (msg.gas - startGas + EXECUTE_EXECUTABLE_GAS) / 100);
+        reimburseGas(request, msg.sender, startGas, EXECUTE_EXECUTABLE_GAS);
 
         return (i, isFinished);
     }
@@ -435,6 +456,8 @@ contract Broker is BrokerInterface {
         var executable = ExecutableInterface(request.executable);
 
         if (request.executable != 0x0) {
+            // If this was verified on-chain, then retrieve the computed answer
+            // and evaluate the submitted answers.
             request.resultHash = executable.getOutputHash();
 
             if (!executable.requestOutput(bytes4(sha3("__outputCallback(uint256)")))) throw;
@@ -455,13 +478,17 @@ contract Broker is BrokerInterface {
             }
         }
         else {
+            // If this was resolved with no challenge, then use the
+            // submitted asnwer.
             request.result = request.initialAnswer.result;
             request.resultHash = request.initialAnswer.resultHash;
             paymentTo = request.initialAnswer.submitter;
         }
 
+        // Send the payment to the appropriate party.
         paymentTo.sendRobust(request.basePayment);
 
+        // Update the status.
         request.status = Status.Finalized;
 
         // reimburse for the gas that was used.
@@ -470,15 +497,48 @@ contract Broker is BrokerInterface {
         return request.resultHash;
     }
 
-    function reimburseGas(Request request, address to, uint startGas, uint extraGas) internal {
-        var gasReimbursement = gasScalar(request.baseGasPrice) * tx.gasprice / 100;
-        gasReimbursement *= (msg.gas - startGas + FINALIZE_GAS);
+    function reclaimDeposit(uint id) public {
+        // TODO: test this functionality.
+        var request = requests[_getRequest(id).id];
 
-        if (msg.sender.sendRobust(gasReimbursement)) {
-            request.gasReimbursements += gasReimbursement;
+        if (msg.sender == request.initialAnswer.submitter) {
+            if (request.initialAnswer.depositAmount == 0) return;
+
+            if (request.initialAnswer.resultHash != request.resultHash) {
+                // If they answered incorrectly see if they are responsible for
+                // all or half of the gas costs.
+                if (request.challengeAnswer.resultHash == request.resultHash) {
+                    request.initialAnswer.depositAmount -= request.gasReimbursements;
+                } else {
+                    // The initial answerer is responsible for any odd
+                    // remainder values if the gas remibursements were an odd
+                    // value that doesn't evenly divide.
+                    request.initialAnswer.depositAmount -= request.gasReimbursements / 2 + request.gasReimbursements % 2;
+                }
+            }
+
+            // Send back their deposit.
+            if (msg.sender.sendRobust(request.initialAnswer.depositAmount)) {
+                request.initialAnswer.depositAmount = 0;
+            }
         }
-    }
+        else if (msg.sender == request.challengeAnswer.submitter) {
+            if (request.challengeAnswer.depositAmount == 0) return;
 
-    function reclaimDeposit(uint id) {
+            if (request.challengeAnswer.resultHash != request.resultHash) {
+                // If they answered incorrectly see if they are responsible for
+                // all or half of the gas costs.
+                if (request.initialAnswer.resultHash == request.resultHash) {
+                    request.challengeAnswer.depositAmount -= request.gasReimbursements;
+                } else {
+                    request.challengeAnswer.depositAmount -= request.gasReimbursements / 2;
+                }
+            }
+
+            // Send back their deposit.
+            if (msg.sender.sendRobust(request.challengeAnswer.depositAmount)) {
+                request.challengeAnswer.depositAmount = 0;
+            }
+        }
     }
 }
