@@ -1,8 +1,11 @@
 import {FactoryInterface} from "contracts/Factory.sol";
 import {ExecutableInterface} from "contracts/Execution.sol";
+import {AccountingLib} from "libraries/AccountingLib.sol";
 
 
 contract BrokerInterface {
+    using AccountingLib for address;
+
     struct Answer {
         address submitter;
         bytes result;
@@ -46,10 +49,11 @@ contract BrokerInterface {
         address executable;
         uint creationBlock;
         uint softResolutionBlocks;
+        uint baseGasPrice;
+        uint basePayment;
         Status status;
         Answer initialAnswer;
         Answer challengeAnswer;
-        mapping (address => uint) gasLedger;
     }
 
     // ~1 day.
@@ -169,6 +173,30 @@ contract Broker is BrokerInterface {
         return (resultHash, submitter, creationBlock);
     }
 
+    function gasScalar(uint basePrice) constant returns (uint) {
+        /*
+        *  Return a number between 0 - 200 to scale the donation based on the
+        *  gas price set for the calling transaction as compared to the gas
+        *  price of the requesting transaction.
+        *
+        *  - number approaches zero as the transaction gas price goes
+        *  above the gas price recorded when the call was requesting.
+        *
+        *  - the number approaches 200 as the transaction gas price
+        *  drops under the price recorded when the call was requesting.
+        *
+        *  This encourages lower gas costs as the lower the gas price
+        *  for the executing transactions, the higher the payout to the
+        *  caller.
+        */
+        if (tx.gasprice > basePrice) {
+            return 100 * basePrice / tx.gasprice;
+        }
+        else {
+            return 200 - 100 * basePrice / (2 * basePrice - tx.gasprice);
+        }
+    }
+
     /*
      *  Public getters
      */
@@ -239,6 +267,8 @@ contract Broker is BrokerInterface {
         request.argsHash = sha3(args);
         request.creationBlock = block.number;
         request.softResolutionBlocks = softResolutionBlocks;
+        request.baseGasPrice = tx.gasprice;
+        request.basePayment = msg.value;
 
         Created(_id, request.argsHash);
 
@@ -275,8 +305,8 @@ contract Broker is BrokerInterface {
         // Check status
         requireStatus(request, Status.WaitingForResolution);
 
-        // too early to resolve
-        if (block.number < request.creationBlock + request.softResolutionBlocks) throw;
+        // too early to resolve (unless your the requester)
+        if (msg.sender != request.requester && block.number < request.creationBlock + request.softResolutionBlocks) throw;
 
         // Update the state
         request.status = Status.SoftResolution;
@@ -311,7 +341,7 @@ contract Broker is BrokerInterface {
         AnswerSubmitted(id, resultHash);
     }
 
-    // TODO: handle the gas accounting for this.
+    // TODO: derive this value
     uint constant INITIALIZE_DISPUTE_GAS = 0;
 
     function initializeDispute(uint id) public returns (address) {
@@ -336,7 +366,7 @@ contract Broker is BrokerInterface {
         request.status = Status.Resolving;
 
         // record the gas that was used.
-        request.gasLedger[msg.sender] += tx.gasprice * (msg.gas - startGas + INITIALIZE_DISPUTE_GAS);
+        msg.sender.sendRobust(gasScalar(request.baseGasPrice) * tx.gasprice * (msg.gas - startGas + INITIALIZE_DISPUTE_GAS) / 100);
 
         return request.executable;
     }
@@ -373,8 +403,8 @@ contract Broker is BrokerInterface {
             request.status = Status.FirmResolution;
         }
 
-        // record the gas that was used.
-        request.gasLedger[msg.sender] += tx.gasprice * (msg.gas - startGas + EXECUTE_EXECUTABLE_GAS);
+        // reimburse for the gas that was used.
+        msg.sender.sendRobust(gasScalar(request.baseGasPrice) * tx.gasprice * (msg.gas - startGas + EXECUTE_EXECUTABLE_GAS) / 100);
 
         return (i, isFinished);
     }
@@ -391,6 +421,7 @@ contract Broker is BrokerInterface {
         }
     }
 
+    // TODO: derive this value
     uint constant FINALIZE_GAS = 0;
 
     function finalize(uint id) public returns (bytes32) {
@@ -424,7 +455,8 @@ contract Broker is BrokerInterface {
 
         request.status = Status.Finalized;
 
-        request.gasLedger[msg.sender] += tx.gasprice * (msg.gas - startGas + FINALIZE_GAS);
+        // reimburse for the gas that was used.
+        msg.sender.sendRobust(gasScalar(request.baseGasPrice) * tx.gasprice * (msg.gas - startGas + FINALIZE_GAS) / 100);
 
         return request.resultHash;
     }
