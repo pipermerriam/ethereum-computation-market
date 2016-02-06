@@ -1,11 +1,8 @@
 import {FactoryInterface} from "contracts/Factory.sol";
 import {ExecutableInterface} from "contracts/Execution.sol";
-import {AccountingLib} from "libraries/AccountingLib.sol";
 
 
 contract BrokerInterface {
-    using AccountingLib for address;
-
     struct Answer {
         address submitter;
         bytes result;
@@ -53,7 +50,7 @@ contract BrokerInterface {
         uint creationBlock;
         uint softResolutionBlocks;
         uint baseGasPrice;
-        uint basePayment;
+        uint payment;
         uint gasReimbursements;
         Status status;
         Answer initialAnswer;
@@ -71,7 +68,8 @@ contract BrokerInterface {
                                                    address requester,
                                                    address executable,
                                                    uint creationBlock,
-                                                   Status status);
+                                                   Status status,
+                                                   uint payment);
     function getRequestArgs(uint id) constant returns (bytes result);
     function getRequestResult(uint id) constant returns (bytes result);
     function getInitialAnswer(uint id) constant returns (bytes32 resultHash,
@@ -107,20 +105,56 @@ contract BrokerInterface {
 
     // Dispute resolution
     function initializeDispute(uint id) public returns (address);
+
+    // Advance the on chain execution of the contract
+    function executeExecutable(uint id, uint nTimes) public returns (uint i, bool isFinished);
+
+    // Finalize the result
+    function finalize(uint id) public returns (bytes32);
 }
 
 
-contract Broker is BrokerInterface {
+contract Accounting {
+    /*
+     *  Accounting Functions
+     */
+
+    uint constant DEFAULT_SEND_GAS = 100000;
+
+    function sendRobust(address toAddress, uint value) public returns (bool) {
+        if (msg.gas < DEFAULT_SEND_GAS) {
+            return sendRobust(toAddress, value, msg.gas);
+        }
+        return sendRobust(toAddress, value, DEFAULT_SEND_GAS);
+    }
+
+    function sendRobust(address toAddress, uint value, uint maxGas) public returns (bool) {
+        if (value > 0 && !toAddress.send(value)) {
+            // Potentially sending money to a contract that
+            // has a fallback function.  So instead, try
+            // tranferring the funds with the call api.
+            if (!toAddress.call.gas(maxGas).value(value)()) {
+                return false;
+            }
+        }
+        return true;
+    }
+}
+
+
+contract Broker is BrokerInterface, Accounting {
     FactoryInterface public factory;
 
-    function Broker(address _factory, uint _requiredDeposit) {
-        factory = FactoryInterface(_factory);
-        requiredDeposit = _requiredDeposit;
+    function Broker(address _factory) {
+        //factory = FactoryInterface(_factory);
     }
 
     uint _id;
 
-    uint requiredDeposit;
+    function getRequiredDeposit(bytes args) constant returns (uint) {
+        // TODO: this should come from the factory? or the executable?
+        return 10 ether;
+    }
 
     mapping (uint => Request) requests;
 
@@ -139,20 +173,12 @@ contract Broker is BrokerInterface {
     /*
      *  Internal utility
      */
-    function inStatus(Request request, Status status) internal returns (bool) {
-        return request.status == status;
+    function requireStatus(Status status, Status s1) internal {
+        if (status != s1) throw;
     }
 
-    function anyStatus(Request request, Status s1, Status s2) internal returns (bool) {
-        return (request.status == s1 || request.status == s2);
-    }
-
-    function requireStatus(Request request, Status status) internal {
-        if (!inStatus(request, status)) throw;
-    }
-
-    function requireStatus(Request request, Status s1, Status s2) internal {
-        if (!anyStatus(request, s1, s2)) throw;
+    function requireStatus(Status status, Status s1, Status s2) internal {
+        if (status != s1 && status != s2) throw;
     }
 
     function serializeRequest(Request request) internal returns (bytes32 argsHash,
@@ -160,15 +186,17 @@ contract Broker is BrokerInterface {
                                                                  address requester,
                                                                  address executable,
                                                                  uint creationBlock,
-                                                                 Status status) {
+                                                                 Status status,
+                                                                 uint payment) {
         argsHash = request.argsHash;
         resultHash = request.resultHash;
         requester = request.requester;
         executable = request.executable;
         creationBlock = request.creationBlock;
         status = request.status;
+        payment = request.payment;
 
-        return (argsHash, resultHash, requester, executable, creationBlock, status);
+        return (argsHash, resultHash, requester, executable, creationBlock, status, payment);
     }
 
     function serializeAnswer(Answer answer) internal returns (bytes32 resultHash,
@@ -205,13 +233,14 @@ contract Broker is BrokerInterface {
         }
     }
 
-    function reimburseGas(Request request, address to, uint startGas, uint extraGas) internal {
-        var gasReimbursement = gasScalar(request.baseGasPrice) * tx.gasprice / 100;
+    function reimburseGas(address to, uint baseGasPrice, uint startGas, uint extraGas) internal returns (uint) {
+        var gasReimbursement = gasScalar(baseGasPrice) * tx.gasprice / 100;
         gasReimbursement *= (msg.gas - startGas + extraGas);
 
-        if (msg.sender.sendRobust(gasReimbursement)) {
-            request.gasReimbursements += gasReimbursement;
+        if (sendRobust(msg.sender, gasReimbursement)) {
+            return gasReimbursement;
         }
+        return 0;
     }
 
     /*
@@ -222,7 +251,8 @@ contract Broker is BrokerInterface {
                                                    address requester,
                                                    address executable,
                                                    uint creationBlock,
-                                                   Status status) {
+                                                   Status status,
+                                                   uint payment) {
         var request = _getRequest(id);
 
         return serializeRequest(request);
@@ -285,7 +315,7 @@ contract Broker is BrokerInterface {
         request.creationBlock = block.number;
         request.softResolutionBlocks = softResolutionBlocks;
         request.baseGasPrice = tx.gasprice;
-        request.basePayment = msg.value;
+        request.payment = msg.value;
 
         Created(_id, request.argsHash);
 
@@ -296,13 +326,13 @@ contract Broker is BrokerInterface {
         var request = requests[_getRequest(id).id];
 
         // Check status
-        requireStatus(request, Status.Pending);
+        requireStatus(request.status, Status.Pending);
 
         // Already answered
         if (request.initialAnswer.submitter != 0x0) throw;
 
         // Insufficient deposit
-        if (msg.value < requiredDeposit) throw;
+        if (msg.value < getRequiredDeposit(request.args)) throw;
 
         request.initialAnswer.submitter = msg.sender;
         request.initialAnswer.result = result;
@@ -321,7 +351,7 @@ contract Broker is BrokerInterface {
         var request = requests[_getRequest(id).id];
 
         // Check status
-        requireStatus(request, Status.WaitingForResolution);
+        requireStatus(request.status, Status.WaitingForResolution);
 
         // too early to resolve (unless your the requester)
         if (msg.sender != request.requester && block.number < request.creationBlock + request.softResolutionBlocks) throw;
@@ -334,10 +364,10 @@ contract Broker is BrokerInterface {
         var request = requests[_getRequest(id).id];
 
         // Check status
-        requireStatus(request, Status.WaitingForResolution);
+        requireStatus(request.status, Status.WaitingForResolution);
 
         // Insufficient deposit
-        if (msg.value < requiredDeposit) throw;
+        if (msg.value < getRequiredDeposit(request.args)) throw;
 
         var resultHash = sha3(result);
 
@@ -371,7 +401,7 @@ contract Broker is BrokerInterface {
         var request = requests[_getRequest(id).id];
 
         // Check status
-        requireStatus(request, Status.NeedsResolution);
+        requireStatus(request.status, Status.NeedsResolution);
 
         // executable already deployed
         if (request.executable != 0x0) throw;
@@ -388,7 +418,7 @@ contract Broker is BrokerInterface {
         request.status = Status.Resolving;
 
         // record the gas that was used.
-        reimburseGas(request, msg.sender, startGas, INITIALIZE_DISPUTE_GAS);
+        request.gasReimbursements += reimburseGas(msg.sender, request.baseGasPrice, startGas, INITIALIZE_DISPUTE_GAS);
 
         return request.executable;
     }
@@ -402,7 +432,7 @@ contract Broker is BrokerInterface {
         var request = requests[_getRequest(id).id];
 
         // Check status
-        requireStatus(request, Status.Resolving);
+        requireStatus(request.status, Status.Resolving);
 
         // no executable.
         if (request.executable == 0x0) throw;
@@ -426,7 +456,7 @@ contract Broker is BrokerInterface {
         }
 
         // reimburse for the gas that was used.
-        reimburseGas(request, msg.sender, startGas, EXECUTE_EXECUTABLE_GAS);
+        request.gasReimbursements += reimburseGas(msg.sender, request.baseGasPrice, startGas, EXECUTE_EXECUTABLE_GAS);
 
         return (i, isFinished);
     }
@@ -451,7 +481,7 @@ contract Broker is BrokerInterface {
         address paymentTo;
         var request = requests[_getRequest(id).id];
 
-        requireStatus(request, Status.FirmResolution, Status.SoftResolution);
+        requireStatus(request.status, Status.FirmResolution, Status.SoftResolution);
 
         var executable = ExecutableInterface(request.executable);
 
@@ -486,13 +516,13 @@ contract Broker is BrokerInterface {
         }
 
         // Send the payment to the appropriate party.
-        paymentTo.sendRobust(request.basePayment);
+        sendRobust(paymentTo, request.payment);
 
         // Update the status.
         request.status = Status.Finalized;
 
         // reimburse for the gas that was used.
-        reimburseGas(request, msg.sender, startGas, FINALIZE_GAS);
+        request.gasReimbursements += reimburseGas(msg.sender, request.baseGasPrice, startGas, FINALIZE_GAS);
 
         return request.resultHash;
     }
@@ -518,7 +548,7 @@ contract Broker is BrokerInterface {
             }
 
             // Send back their deposit.
-            if (msg.sender.sendRobust(request.initialAnswer.depositAmount)) {
+            if (sendRobust(msg.sender, request.initialAnswer.depositAmount)) {
                 request.initialAnswer.depositAmount = 0;
             }
         }
@@ -536,7 +566,7 @@ contract Broker is BrokerInterface {
             }
 
             // Send back their deposit.
-            if (msg.sender.sendRobust(request.challengeAnswer.depositAmount)) {
+            if (sendRobust(msg.sender, request.challengeAnswer.depositAmount)) {
                 request.challengeAnswer.depositAmount = 0;
             }
         }

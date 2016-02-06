@@ -23,7 +23,9 @@ def deploy_contract(deploy_client, contracts):
             }
         )
 
-        return getattr(deployed_contracts, ContractClass.__name__)
+        contract = getattr(deployed_contracts, ContractClass.__name__)
+        assert deploy_client.get_code(contract._meta.address)
+        return contract
     return _deploy_contract
 
 
@@ -31,7 +33,6 @@ def deploy_contract(deploy_client, contracts):
 def deploy_broker_contract(contracts, deploy_contract, deploy_client):
     def _deploy_broker_contract(factory_address):
         broker = deploy_contract(contracts.Broker, (factory_address,))
-        assert deploy_client.get_code(broker._meta.address)
         return broker
     return _deploy_broker_contract
 
