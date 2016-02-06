@@ -73,13 +73,15 @@ contract BrokerInterface {
     function getRequestArgs(uint id) constant returns (bytes result);
     function getRequestResult(uint id) constant returns (bytes result);
     function getInitialAnswer(uint id) constant returns (bytes32 resultHash,
-                                                                   address submitter,
-                                                                   uint creationBlock);
+                                                         address submitter,
+                                                         uint creationBlock,
+                                                         bool isVerified);
 
     function getInitialAnswerResult(uint id) constant returns (bytes);
     function getChallengeAnswer(uint id) constant returns (bytes32 resultHash,
-                                                                     address submitter,
-                                                                     uint creationBlock);
+                                                           address submitter,
+                                                           uint creationBlock,
+                                                           bool isVerified);
     function getChallengeAnswerResult(uint id) constant returns (bytes);
 
     function getRequiredDeposit(bytes args) constant returns (uint);
@@ -201,12 +203,14 @@ contract Broker is BrokerInterface, Accounting {
 
     function serializeAnswer(Answer answer) internal returns (bytes32 resultHash,
                                                               address submitter,
-                                                              uint creationBlock) {
+                                                              uint creationBlock,
+                                                              bool isVerified) {
         resultHash = answer.resultHash;
         submitter = answer.submitter;
         creationBlock = answer.creationBlock;
+        isVerified = answer.isVerified;
 
-        return (resultHash, submitter, creationBlock);
+        return (resultHash, submitter, creationBlock, isVerified);
     }
 
     function gasScalar(uint basePrice) constant returns (uint) {
@@ -272,12 +276,11 @@ contract Broker is BrokerInterface, Accounting {
 
     function getInitialAnswer(uint id) constant returns (bytes32 resultHash,
                                                          address submitter,
-                                                         uint creationBlock) {
+                                                         uint creationBlock,
+                                                         bool isVerified) {
         var request = _getRequest(id);
 
-        (resultHash, submitter, creationBlock) = serializeAnswer(request.initialAnswer);
-
-        return (resultHash, submitter, creationBlock);
+        return serializeAnswer(request.initialAnswer);
     }
 
     function getInitialAnswerResult(uint id) constant returns (bytes) {
@@ -285,12 +288,12 @@ contract Broker is BrokerInterface, Accounting {
     }
 
     function getChallengeAnswer(uint id) constant returns (bytes32 resultHash,
-                                                                     address submitter,
-                                                                     uint creationBlock) {
+                                                           address submitter,
+                                                           uint creationBlock,
+                                                           bool isVerified) {
         var request = _getRequest(id);
 
-        (resultHash, submitter, creationBlock) = serializeAnswer(request.challengeAnswer);
-        return (resultHash, submitter, creationBlock);
+        return serializeAnswer(request.challengeAnswer);
     }
 
     function getChallengeAnswerResult(uint id) constant returns (bytes) {
