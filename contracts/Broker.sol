@@ -1,4 +1,5 @@
 import {FactoryInterface} from "contracts/Factory.sol";
+import {ExecutableInterface} from "contracts/Execution.sol";
 
 
 contract BrokerInterface {
@@ -31,7 +32,8 @@ contract BrokerInterface {
         NeedsResolution,
         Resolving,
         SoftResolution,
-        FirmResolution
+        FirmResolution,
+        Finalized
     }
 
     struct Request {
@@ -43,10 +45,15 @@ contract BrokerInterface {
         bytes32 resultHash;
         address executable;
         uint creationBlock;
+        uint softResolutionBlocks;
         Status status;
         Answer initialAnswer;
         Answer challengeAnswer;
+        mapping (address => uint) gasLedger;
     }
+
+    // ~1 day.
+    uint constant DEFAULT_SOFT_RESOLUTION_BLOCKS = 5080;
 
     /*
      *  Constant getters
@@ -58,6 +65,7 @@ contract BrokerInterface {
                                                    uint creationBlock,
                                                    Status status);
     function getRequestArgs(uint id) constant returns (bytes result);
+    function getRequestResult(uint id) constant returns (bytes result);
     function getInitialAnswer(uint id) constant returns (bytes32 resultHash,
                                                                    address submitter,
                                                                    uint creationBlock);
@@ -74,13 +82,13 @@ contract BrokerInterface {
      */
     event Created(uint id, bytes32 argsHash);
     event AnswerSubmitted(uint id, bytes32 resultHash);
-
+    event Execution(uint nTimes, bool isFinished);
 
     /*
      *  Public API
      */
     // Request a computation to be done.
-    function requestExecution(bytes args) public returns (uint);
+    function requestExecution(bytes args, uint softResolutionBlocks) public returns (uint);
 
     // Submit an answer to a requested computation.
     function answerRequest(uint id, bytes result) public;
@@ -88,16 +96,16 @@ contract BrokerInterface {
     // Challenge the answer to a question.
     function challengeAnswer(uint id, bytes result) public;
 
-    // Deploy the execution contract.
-    function deployExecutable(uint id) public returns (address);
+    // Dispute resolution
+    function initializeDispute(uint id) public returns (address);
 }
 
 
 contract Broker is BrokerInterface {
-    address public factory;
+    FactoryInterface public factory;
 
     function Broker(address _factory) {
-        factory = _factory;
+        factory = FactoryInterface(_factory);
     }
 
     uint _id;
@@ -119,21 +127,20 @@ contract Broker is BrokerInterface {
     /*
      *  Internal utility
      */
-    function inStatus(uint id, Status status) internal returns (bool) {
-        return _getRequest(id).status == status;
+    function inStatus(Request request, Status status) internal returns (bool) {
+        return request.status == status;
     }
 
-    function anyStatus(uint id, Status s1, Status s2) internal returns (bool) {
-        var status = _getRequest(id).status;
-        return (status == s1 || status == s2);
+    function anyStatus(Request request, Status s1, Status s2) internal returns (bool) {
+        return (request.status == s1 || request.status == s2);
     }
 
-    function requireStatus(uint id, Status status) internal {
-        if (!inStatus(id, status)) throw;
+    function requireStatus(Request request, Status status) internal {
+        if (!inStatus(request, status)) throw;
     }
 
-    function requireStatus(uint id, Status s1, Status s2) internal {
-        if (!anyStatus(id, s1, s2)) throw;
+    function requireStatus(Request request, Status s1, Status s2) internal {
+        if (!anyStatus(request, s1, s2)) throw;
     }
 
     function serializeRequest(Request request) internal returns (bytes32 argsHash,
@@ -182,6 +189,12 @@ contract Broker is BrokerInterface {
         return request.args;
     }
 
+    function getRequestResult(uint id) constant returns (bytes) {
+        var request = _getRequest(id);
+
+        return request.result;
+    }
+
     function getInitialAnswer(uint id) constant returns (bytes32 resultHash,
                                                          address submitter,
                                                          uint creationBlock) {
@@ -213,6 +226,10 @@ contract Broker is BrokerInterface {
      *  Public API.
      */
     function requestExecution(bytes args) public returns (uint) {
+        return requestExecution(args, DEFAULT_SOFT_RESOLUTION_BLOCKS);
+    }
+
+    function requestExecution(bytes args, uint softResolutionBlocks) public returns (uint) {
         _id += 1;
 
         var request = requests[_id];
@@ -221,6 +238,7 @@ contract Broker is BrokerInterface {
         request.args = args;
         request.argsHash = sha3(args);
         request.creationBlock = block.number;
+        request.softResolutionBlocks = softResolutionBlocks;
 
         Created(_id, request.argsHash);
 
@@ -229,6 +247,9 @@ contract Broker is BrokerInterface {
 
     function answerRequest(uint id, bytes result) public {
         var request = requests[_getRequest(id).id];
+
+        // Check status
+        requireStatus(request, Status.Pending);
 
         // Already answered
         if (request.initialAnswer.submitter != 0x0) throw;
@@ -241,12 +262,31 @@ contract Broker is BrokerInterface {
         request.initialAnswer.resultHash = sha3(result);
         request.initialAnswer.creationBlock = block.number;
 
+        // Update the state
+        request.status = Status.WaitingForResolution;
+
         // Log that a new answer was submitted.
         AnswerSubmitted(id, request.initialAnswer.resultHash);
     }
 
+    function softResolveAnswer(uint id) public {
+        var request = requests[_getRequest(id).id];
+
+        // Check status
+        requireStatus(request, Status.WaitingForResolution);
+
+        // too early to resolve
+        if (block.number < request.creationBlock + request.softResolutionBlocks) throw;
+
+        // Update the state
+        request.status = Status.SoftResolution;
+    }
+
     function challengeAnswer(uint id, bytes result) public {
         var request = requests[_getRequest(id).id];
+
+        // Check status
+        requireStatus(request, Status.WaitingForResolution);
 
         var resultHash = sha3(result);
 
@@ -259,24 +299,133 @@ contract Broker is BrokerInterface {
         // TODO: require deposit big enough for a full computation (from
         // factory contract)
 
-        request.initialAnswer.submitter = msg.sender;
-        request.initialAnswer.result = result;
-        request.initialAnswer.resultHash = resultHash;
-        request.initialAnswer.creationBlock = block.number;
+        request.challengeAnswer.submitter = msg.sender;
+        request.challengeAnswer.result = result;
+        request.challengeAnswer.resultHash = resultHash;
+        request.challengeAnswer.creationBlock = block.number;
+
+        // Update the state
+        request.status = Status.NeedsResolution;
 
         // Log that a new answer was submitted.
         AnswerSubmitted(id, resultHash);
     }
 
-    // Deploy the execution contract.
-    function deployExecutable(uint id) public returns (address) {
+    // TODO: handle the gas accounting for this.
+    uint constant INITIALIZE_DISPUTE_GAS = 0;
+
+    function initializeDispute(uint id) public returns (address) {
+        uint startGas = msg.gas;
         var request = requests[_getRequest(id).id];
 
-        // executable already deployed
-        if (request.executable == 0x0) throw;
+        // Check status
+        requireStatus(request, Status.NeedsResolution);
 
-        request.executable = FactoryInterface(factory).build(request.args);
+        // executable already deployed
+        if (request.executable != 0x0) throw;
+
+        // no answer
+        if (request.initialAnswer.submitter == 0x0) throw;
+
+        // no challenge
+        if (request.challengeAnswer.submitter == 0x0) throw;
+
+        request.executable = factory.build(request.args);
+
+        // Update the state
+        request.status = Status.Resolving;
+
+        // record the gas that was used.
+        request.gasLedger[msg.sender] += tx.gasprice * (msg.gas - startGas + INITIALIZE_DISPUTE_GAS);
 
         return request.executable;
+    }
+
+    // TODO: derive this value.
+    uint constant EXECUTE_EXECUTABLE_GAS = 0;
+
+    function executeExecutable(uint id, uint nTimes) public returns (uint i, bool isFinished) {
+        var startGas = msg.gas;
+
+        var request = requests[_getRequest(id).id];
+
+        // Check status
+        requireStatus(request, Status.Resolving);
+
+        // no executable.
+        if (request.executable == 0x0) throw;
+
+        var executable = ExecutableInterface(request.executable);
+
+        // execution has been completed.
+        if (!executable.isFinished()) {
+            i = executable.executeN(nTimes);
+
+            // Something is wrong.  It should have executed at least one round.
+            if (i == 0) throw;
+        }
+
+        isFinished = executable.isFinished();
+
+        Execution(i, isFinished);
+
+        if (isFinished) {
+            request.status = Status.FirmResolution;
+        }
+
+        // record the gas that was used.
+        request.gasLedger[msg.sender] += tx.gasprice * (msg.gas - startGas + EXECUTE_EXECUTABLE_GAS);
+
+        return (i, isFinished);
+    }
+
+    bytes __outputCallbackStorage;
+
+    function __outputCallback(uint length) public {
+        if (msg.data.length <= 4 + length) throw;
+
+        __outputCallbackStorage.length = 0;
+
+        for (uint i = 0; i < length; i++) {
+            __outputCallbackStorage.push(msg.data[i + 4 + 32]);
+        }
+    }
+
+    uint constant FINALIZE_GAS = 0;
+
+    function finalize(uint id) public returns (bytes32) {
+        var startGas = msg.gas;
+        var request = requests[_getRequest(id).id];
+
+        requireStatus(request, Status.FirmResolution, Status.SoftResolution);
+
+        var executable = ExecutableInterface(request.executable);
+
+        if (request.executable != 0x0) {
+            request.resultHash = executable.getOutputHash();
+
+            if (!executable.requestOutput(bytes4(sha3("__outputCallback(uint256)")))) throw;
+            if (sha3(__outputCallbackStorage) != request.resultHash) throw;
+
+            request.result = __outputCallbackStorage;
+
+            if (request.initialAnswer.resultHash == request.resultHash) {
+                request.initialAnswer.isVerified = true;
+            }
+
+            if (request.challengeAnswer.resultHash == request.resultHash) {
+                request.challengeAnswer.isVerified = true;
+            }
+        }
+        else {
+            request.result = request.initialAnswer.result;
+            request.resultHash = request.initialAnswer.resultHash;
+        }
+
+        request.status = Status.Finalized;
+
+        request.gasLedger[msg.sender] += tx.gasprice * (msg.gas - startGas + FINALIZE_GAS);
+
+        return request.resultHash;
     }
 }

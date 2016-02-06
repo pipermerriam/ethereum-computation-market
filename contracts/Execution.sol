@@ -2,10 +2,23 @@ contract ExecutableInterface {
     // Must implement these functions.
     function step(uint currentStep, bytes _state) public returns (bytes result, bool);
     function isStateless() constant returns (bool);
+    function isFinished() constant returns (bool);
+    function getOutputHash() constant returns (bytes32);
+    function requestOutput(bytes4 sig) public returns (bool);
 
     function execute() public;
     function executeN() public returns (uint i);
-    function executeN(uint n) public returns (uint i);
+    function executeN(uint nTimes) public returns (uint iTimes);
+
+    // return negative number to indicate unknown.
+    function totalGas() constant returns (int);
+    function totalGas(uint numSteps) constant returns(int);
+    function totalGas(bytes args) constant returns(int);
+
+    // return negative number to indicate unknown.
+    function stepGas() constant returns (int);
+    function stepGas(uint stepIdx) constant returns (int);
+    function stepGas(uint stepIdx, bytes args) constant returns(int);
 }
 
 
@@ -23,12 +36,38 @@ contract ExecutableBase is ExecutableInterface {
         return stateless;
     }
 
+    function isFinished() constant returns (bool) {
+        return isFinal;
+    }
+
+    // returning negative numbers indicates unknown.
+    function totalGas() constant returns (int) { return -1; }
+    function totalGas(uint numSteps) constant returns(int) { return -1; }
+    function totalGas(bytes args) constant returns(int) { return -1; }
+
+    // return negative number to indicate unknown.
+    function stepGas() constant returns (int) { return -1; }
+    function stepGas(uint stepIdx) constant returns (int) { return -1; }
+    function stepGas(uint stepIdx, bytes args) constant returns(int) { return -1; }
+
     // `input` is the initial arguments that will be passed into step-1 of
     // computation.
     bytes public input;
 
     // `output` is used to store the final return value of the function.
     bytes public output;
+
+    function getOutputHash() constant returns (bytes32) {
+        if (!isFinal) throw;
+        return sha3(output);
+    }
+
+    function requestOutput(bytes4 sig) public returns (bool) {
+        if (isFinal) {
+            return msg.sender.call(sig, output.length, output);
+        }
+        return false;
+    }
 
     // Stateful variables to track state between steps.
     uint public currentStep;
@@ -71,7 +110,7 @@ contract ExecutableBase is ExecutableInterface {
         return executeN(0);
     }
 
-    function executeN(uint n) public returns (uint i) {
+    function executeN(uint nTimes) public returns (uint iTimes) {
         /*
          *  Execute the function up to N times.
          *  * N == 0 indicates execution should continue indefinitely until all
@@ -80,16 +119,16 @@ contract ExecutableBase is ExecutableInterface {
          */
         if (isFinal) throw;
 
-        while (!isFinal && (n == 0 || i < n) && msg.gas > GAS_RESERVE + GAS_BUFFER) {
+        while (!isFinal && (nTimes == 0 || iTimes < nTimes) && msg.gas > GAS_RESERVE + GAS_BUFFER) {
             // This uses .call(..) to isolate any possible out-of-gas exeception.
             if (address(this).call.gas(msg.gas - GAS_RESERVE)(bytes4(sha3("execute()")))) {
-                i += 1;
+                iTimes += 1;
             }
             else {
                 break;
             }
         }
-        return i;
+        return iTimes;
     }
 }
 

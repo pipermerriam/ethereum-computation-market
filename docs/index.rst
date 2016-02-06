@@ -9,7 +9,10 @@ Welcome to Ethereum Computation Market's documentation!
 Contents:
 
 .. toctree::
-   :maxdepth: 2
+
+    what
+    overview
+    :maxdepth: 2
 
 
 

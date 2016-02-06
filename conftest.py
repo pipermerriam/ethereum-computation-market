@@ -56,3 +56,17 @@ def get_built_contract_address(contracts, deploy_client, get_log_data):
         else:
             return contract_type(build_data['addr'], deploy_client)
     return _get_built_contract_address
+
+
+@pytest.fixture
+def StatusEnum():
+    enum_values = {
+        'Pending': 0,
+        'WaitingForResolution': 1,
+        'NeedsResolution': 2,
+        'Resolving': 3,
+        'SoftResolution': 4,
+        'FirmResolution': 5,
+        'Finalized': 6,
+    }
+    return type("StatusEnum", (object,), enum_values)
