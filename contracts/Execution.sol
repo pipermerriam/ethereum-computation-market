@@ -10,6 +10,7 @@ contract ExecutableInterface {
     function executeN() public returns (uint i);
     function executeN(uint nTimes) public returns (uint iTimes);
 
+    // TODO: move these to the Factory.
     // return negative number to indicate unknown.
     function totalGas() constant returns (int);
     function totalGas(uint numSteps) constant returns(int);
@@ -58,7 +59,7 @@ contract ExecutableBase is ExecutableInterface {
     bytes public output;
 
     function getOutputHash() constant returns (bytes32) {
-        if (!isFinal) throw;
+        if (!isFinal) return;
         return sha3(output);
     }
 

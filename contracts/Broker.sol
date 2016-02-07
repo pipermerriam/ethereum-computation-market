@@ -479,7 +479,9 @@ contract Broker is BrokerInterface, Accounting {
 
         // execution has been completed.
         if (!executable.isFinished()) {
-            i = executable.executeN.gas(100000)();
+            // TODO: why can't I supply a gas value for this without solidity
+            // blowing up?
+            i = executable.executeN();
 
             // Something is wrong.  It should have executed at least one round.
             if (i == 0) throw;
