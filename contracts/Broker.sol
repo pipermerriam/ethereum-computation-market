@@ -254,17 +254,22 @@ contract Broker is BrokerInterface, Accounting {
         return request.requiredDeposit - request.gasReimbursements;
     }
 
-    function max(uint a, uint b) constant returns (uint) {
-        if (a >= b) return a;
+    function min(uint a, uint b) constant returns (uint) {
+        if (a <= b) return a;
         return b;
     }
+
+    event GasReimbursement(address to, uint value);
 
     function reimburseGas(uint id, address to, uint startGas, uint extraGas) internal {
         var request = requests[id];
         var gasReimbursement = gasScalar(request.baseGasPrice) * tx.gasprice / 100;
-        gasReimbursement *= (msg.gas - startGas + extraGas);
+        gasReimbursement *= (startGas - msg.gas) + extraGas;
 
-        gasReimbursement = max(gasReimbursement, remainingGasFund(id));
+        gasReimbursement = min(gasReimbursement, remainingGasFund(id));
+
+        // Log it.
+        GasReimbursement(msg.sender, gasReimbursement);
 
         if (sendRobust(msg.sender, gasReimbursement)) {
             request.gasReimbursements += gasReimbursement;
@@ -427,7 +432,7 @@ contract Broker is BrokerInterface, Accounting {
     }
 
     // TODO: derive this value
-    uint constant INITIALIZE_DISPUTE_GAS = 0;
+    uint constant INITIALIZE_DISPUTE_GAS = 60000;
 
     function initializeDispute(uint id) public returns (address) {
         uint startGas = msg.gas;

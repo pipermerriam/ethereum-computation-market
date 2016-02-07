@@ -71,3 +71,64 @@ def StatusEnum():
         'Finalized': 6,
     }
     return type("StatusEnum", (object,), enum_values)
+
+
+@pytest.fixture
+def get_computation_request(deploy_client, get_log_data, StatusEnum, denoms):
+    def _get_computation_request(broker, args="abcdefg", initial_answer=None,
+                                 soft_resolve=False, challenge_answer=None,
+                                 initialize_dispute=False,
+                                 perform_execution=False, finalize=False):
+        request_txn_hash = broker.requestExecution("abcdefg", value=10 * denoms.ether)
+        request_txn_receipt = deploy_client.wait_for_transaction(request_txn_hash)
+
+        request_event_data = get_log_data(broker.Created, request_txn_hash)
+
+        _id = request_event_data['id']
+
+        assert broker.getRequest(_id)[5] == StatusEnum.Pending
+
+        if initial_answer is None:
+            return _id
+
+        deposit_amount = broker.getRequiredDeposit("abcdefg")
+
+        assert deposit_amount > 0
+
+        i_answer_txn_hash = broker.answerRequest(_id, initial_answer, value=deposit_amount)
+        i_answer_txn_receipt = deploy_client.wait_for_transaction(i_answer_txn_hash)
+
+        assert broker.getRequest(_id)[5] == StatusEnum.WaitingForResolution
+
+        if challenge_answer is not None:
+            c_answer_txn_hash = broker.challengeAnswer(_id, challenge_answer, value=deposit_amount)
+            c_answer_txn_receipt = deploy_client.wait_for_transaction(c_answer_txn_hash)
+
+            assert broker.getRequest(_id)[5] == StatusEnum.NeedsResolution
+
+            if initialize_dispute:
+                i_dispute_txn_hash = broker.initializeDispute(_id)
+                i_dispute_txn_receipt = deploy_client.wait_for_transaction(i_dispute_txn_hash)
+
+                if perform_execution:
+                    while broker.getRequest(_id)[5] == StatusEnum.Resolving:
+                        exec_txn_hash = broker.executeExecutable(_id, 0)
+                        exec_txn_receipt = deploy_client.wait_for_transaction(exec_txn_hash)
+
+                        execute_log_data = get_log_data(broker.Execution, exec_txn_hash)
+
+                    assert broker.getRequest(_id)[5] == StatusEnum.FirmResolution
+        elif soft_resolve:
+            soft_res_txn_h = broker.softResolveAnswer()
+            soft_res_txn_r = deploy_client.wait_for_transaction(soft_res_txn_h)
+
+            assert broker.getRequest(_id)[5] == StatusEnum.SoftResolution
+        else:
+            return _id
+
+        if finalize:
+            finalize_txn_hash = broker.finalize(_id)
+            finalize_txn_receipt = deploy_client.wait_for_transaction(finalize_txn_hash)
+
+        return _id
+    return _get_computation_request
