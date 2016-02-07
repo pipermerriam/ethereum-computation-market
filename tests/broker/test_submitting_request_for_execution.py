@@ -27,3 +27,4 @@ def test_creating_request_for_execution(deploy_client, deploy_broker_contract,
     assert req_data[4] == int(request_txn_receipt['blockNumber'], 16)
     assert req_data[5] == StatusEnum.Pending
     assert req_data[6] == 10 * denoms.ether
+    assert req_data[7] == broker.getDefaultSoftResolutionBlocks()
