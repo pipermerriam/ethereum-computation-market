@@ -6,7 +6,7 @@ off-chain in a manner that is both trustless and verifiable.
 
 
 How it works
-============
+------------
 
 The marketplace can only fulfill computation requests for algorithms that have
 been implemented within the EVM.  A user who wishes to have one of these
@@ -39,3 +39,109 @@ the gas costs for the on-chain computation deducted.
     submitted the correct answer, the gas costs for on-chain computation are
     split evenly between them and the payment value is sent back to the user
     who requested the computation.
+
+
+Computation Lifecycle
+---------------------
+
+The flow chart can be used to visualize the lifecycle of a computation request.
+
+.. code-block::
+
+    +--------------------------------------------------------+
+    |                                                        |
+    |      * request created                                 |
+    |      |                                                 |
+    |      v                                                 |
+    |  +---------+                                           |
+    |  | Pending |                                           |
+    |  +---------+                                           |
+    |      |                                                 |
+    |      | answer submitted                                |
+    |      v                                                 |
+    |  +-------------+                                       |
+    |  | Waiting For |----------------------+                |
+    |  | Resolution  |                      |                |
+    |  +-------------+                      | unchallenged   |
+    |      |                                |                |
+    |      | challenged                     |                |
+    |      v                                v                |
+    |  +------------+                +------------+          |
+    |  | Needs      |                | Soft       |          |
+    |  | Resolution |                | Resolution |          |
+    |  +------------+                +------------+          |
+    |      |                                |                |
+    |      | on-chain computation           |                |
+    |      | initiated                      |                |
+    |      v                                |                |
+    |  +-----------+                        | finalize       |
+    |  | Resolving |                        |                |
+    |  +-----------+                        |                |
+    |      |                                |                |
+    |      | on-chain computation           |                |
+    |      | completed                      |                |
+    |      v                                v                |
+    |  +------------+   finalize     +-----------+           |
+    |  | Firm       |--------------->| Finalized |           |
+    |  | Resolution |                +-----------+           |
+    |  +------------+                                        |
+    |                                                        |
+    +--------------------------------------------------------+
+
+
+
+Pending
+^^^^^^^
+
+When a request is received it begins in the **pending** status
+
+
+Waiting For Resolution
+^^^^^^^^^^^^^^^^^^^^^^
+
+When an answer is submitted towards a computation request it moves the request
+into the **waiting for resolution** status.  From here it can take one of two
+paths.
+
+#. If the answer is challenged, it will transition into the **needs
+   resolution** status.
+#. If the requester manually accepts the answer *or* the predetermined wait
+   time passes, the answer can be transitioned into the **soft resolution**
+   status.
+
+
+Needs Resolution
+^^^^^^^^^^^^^^^^
+
+When challenged, an answer is set to the **needs** resolution status.  On chain
+verification of the computation is now required.
+
+
+Resolving
+^^^^^^^^^
+
+Once the execution contract has been deployed which will perform the on-chain
+computation the the request is updated to the **resolving** status.  It will
+remain in this status until the computation has been completed.
+
+
+Firm Resolution
+^^^^^^^^^^^^^^^
+
+Once computation has been completed, the request is set to the
+**firm-resolution** status.
+
+
+Soft Resolution
+^^^^^^^^^^^^^^^
+
+If no challenge is made for a predetermined wait time after answer submition
+then the request can be transitioned to **soft-resolution** status.
+
+
+Finalized
+^^^^^^^^^
+
+Once and answer is either *soft* or *hard* resolved it can be finalized.  This
+sends the payment for computation to the appropriate party and unlocks the
+deposits of the answer submitter and challenger.

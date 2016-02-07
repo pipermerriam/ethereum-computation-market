@@ -42,7 +42,7 @@ def test_finalizing_unchallenged_answer(deploy_client, deploy_broker_contract,
     assert answer_data[2] == int(answer_txn_receipt['blockNumber'], 16)
     assert answer_data[3] is False
 
-    deploy_client.wait_for_block(req_data[4] + req_data[7])
+    deploy_client.wait_for_block(answer_data[2] + req_data[7])
 
     resolve_txn_h = broker.softResolveAnswer(_id)
     resolve_txn_r = deploy_client.wait_for_transaction(resolve_txn_h)
