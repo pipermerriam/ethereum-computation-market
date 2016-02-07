@@ -462,7 +462,7 @@ contract Broker is BrokerInterface, Accounting {
     }
 
     // TODO: derive this value.
-    uint constant EXECUTE_EXECUTABLE_GAS = 0;
+    uint constant EXECUTE_EXECUTABLE_GAS = 30000;
 
     function executeExecutable(uint id, uint nTimes) public returns (uint i, bool isFinished) {
         var startGas = msg.gas;
