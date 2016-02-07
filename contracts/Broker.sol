@@ -479,7 +479,7 @@ contract Broker is BrokerInterface, Accounting {
 
         // execution has been completed.
         if (!executable.isFinished()) {
-            i = executable.executeN(nTimes);
+            i = executable.executeN.gas(100000)();
 
             // Something is wrong.  It should have executed at least one round.
             if (i == 0) throw;
@@ -512,7 +512,7 @@ contract Broker is BrokerInterface, Accounting {
     }
 
     // TODO: derive this value
-    uint constant FINALIZE_GAS = 0;
+    uint constant FINALIZE_GAS = 42000;
 
     function finalize(uint id) public returns (bytes32) {
         var startGas = msg.gas;

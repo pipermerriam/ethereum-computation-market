@@ -4,24 +4,9 @@ import math
 deployed_contracts = []
 
 
-def int_to_bytes(int_v):
-    len = int(math.ceil(math.log(int_v + 1, 2) / 8))
-    return ''.join(
-        chr((2 ** 8 - 1) & (int_v / 2 ** (8 * i)))
-        for i in range(len)
-    )
-
-
-def bytes_to_int(bytes_v):
-    return sum(
-        ord(b) * 2 ** (8 * idx)
-        for idx, b in enumerate(bytes_v)
-    )
-
-
 def test_gas_exhaustion_is_handled(deploy_client, contracts,
-                                   deploy_contract):
-    fib = deploy_contract(contracts.Fibonacci, (int_to_bytes(60),))
+                                   deploy_contract, math_tools):
+    fib = deploy_contract(contracts.Fibonacci, (math_tools.int_to_bytes(60),))
 
     assert fib.output() == ''
 
@@ -45,4 +30,4 @@ def test_gas_exhaustion_is_handled(deploy_client, contracts,
             raise ValueError("step did not advance")
 
     assert fib.isFinal() is True
-    assert fib.output() == int_to_bytes(2504730781961)
+    assert fib.output() == math_tools.int_to_bytes(2504730781961)

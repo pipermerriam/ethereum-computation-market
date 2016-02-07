@@ -79,7 +79,7 @@ def get_computation_request(deploy_client, get_log_data, StatusEnum, denoms):
                                  soft_resolve=False, challenge_answer=None,
                                  initialize_dispute=False,
                                  perform_execution=False, finalize=False):
-        request_txn_hash = broker.requestExecution("abcdefg", value=10 * denoms.ether)
+        request_txn_hash = broker.requestExecution(args, value=10 * denoms.ether)
         request_txn_receipt = deploy_client.wait_for_transaction(request_txn_hash)
 
         request_event_data = get_log_data(broker.Created, request_txn_hash)
@@ -132,3 +132,27 @@ def get_computation_request(deploy_client, get_log_data, StatusEnum, denoms):
 
         return _id
     return _get_computation_request
+
+
+@pytest.fixture
+def math_tools():
+    import math
+
+    def int_to_bytes(int_v):
+        len = int(math.ceil(math.log(int_v + 1, 2) / 8))
+        return ''.join(
+            chr((2 ** 8 - 1) & (int_v / 2 ** (8 * i)))
+            for i in range(len)
+        )
+
+    def bytes_to_int(bytes_v):
+        return sum(
+            ord(b) * 2 ** (8 * idx)
+            for idx, b in enumerate(bytes_v)
+        )
+
+    tools = {
+        'int_to_bytes': staticmethod(int_to_bytes),
+        'bytes_to_int': staticmethod(bytes_to_int),
+    }
+    return type('math_tools', (object,), tools)

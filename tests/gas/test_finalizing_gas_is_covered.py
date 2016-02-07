@@ -16,17 +16,18 @@ def test_initializing_dispute_gas_is_covered(deploy_client, get_computation_requ
         initial_answer="wrong",
         challenge_answer=expected,
         initialize_dispute=True,
+        perform_execution=True,
     )
 
-    exec_txn_hash = broker.executeExecutable(_id, 0)
-    exec_txn_receipt = deploy_client.wait_for_transaction(exec_txn_hash)
+    finalize_txn_hash = broker.finalize(_id)
+    finalize_txn_receipt = deploy_client.wait_for_transaction(finalize_txn_hash)
 
-    assert broker.getRequest(_id)[5] == StatusEnum.FirmResolution
+    assert broker.getRequest(_id)[5] == StatusEnum.Finalized
 
-    gas_log_data = get_log_data(broker.GasReimbursement, exec_txn_hash)
+    gas_log_data = get_log_data(broker.GasReimbursement, finalize_txn_hash)
 
     gas_reimbursement = gas_log_data['value']
-    gas_actual = int(exec_txn_receipt['gasUsed'], 16)
+    gas_actual = int(finalize_txn_receipt['gasUsed'], 16)
 
     assert gas_reimbursement >= gas_actual
     assert gas_reimbursement - gas_actual < 10000
