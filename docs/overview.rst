@@ -44,49 +44,47 @@ the gas costs for the on-chain computation deducted.
 Computation Lifecycle
 ---------------------
 
-The flow chart can be used to visualize the lifecycle of a computation request.
+The flow chart can be used to visualize the lifecycle of a computation request::
 
-.. code-block::
-
-    +--------------------------------------------------------+
-    |                                                        |
-    |      * request created                                 |
-    |      |                                                 |
-    |      v                                                 |
-    |  +---------+                                           |
-    |  | Pending |                                           |
-    |  +---------+                                           |
-    |      |                                                 |
-    |      | answer submitted                                |
-    |      v                                                 |
-    |  +-------------+                                       |
-    |  | Waiting For |----------------------+                |
-    |  | Resolution  |                      |                |
-    |  +-------------+                      | unchallenged   |
-    |      |                                |                |
-    |      | challenged                     |                |
-    |      v                                v                |
-    |  +------------+                +------------+          |
-    |  | Needs      |                | Soft       |          |
-    |  | Resolution |                | Resolution |          |
-    |  +------------+                +------------+          |
-    |      |                                |                |
-    |      | on-chain computation           |                |
-    |      | initiated                      |                |
-    |      v                                |                |
-    |  +-----------+                        | finalize       |
-    |  | Resolving |                        |                |
-    |  +-----------+                        |                |
-    |      |                                |                |
-    |      | on-chain computation           |                |
-    |      | completed                      |                |
-    |      v                                v                |
-    |  +------------+   finalize     +-----------+           |
-    |  | Firm       |--------------->| Finalized |           |
-    |  | Resolution |                +-----------+           |
-    |  +------------+                                        |
-    |                                                        |
-    +--------------------------------------------------------+
+   +--------------------------------------------------------+
+   |                                                        |
+   |      * request created                                 |
+   |      |                                                 |
+   |      v                                                 |
+   |  +---------+                                           |
+   |  | Pending |                                           |
+   |  +---------+                                           |
+   |      |                                                 |
+   |      | answer submitted                                |
+   |      v                                                 |
+   |  +-------------+                                       |
+   |  | Waiting For |----------------------+                |
+   |  | Resolution  |                      |                |
+   |  +-------------+                      | unchallenged   |
+   |      |                                |                |
+   |      | challenged                     |                |
+   |      v                                v                |
+   |  +------------+                +------------+          |
+   |  | Needs      |                | Soft       |          |
+   |  | Resolution |                | Resolution |          |
+   |  +------------+                +------------+          |
+   |      |                                |                |
+   |      | on-chain computation           |                |
+   |      | initiated                      |                |
+   |      v                                |                |
+   |  +-----------+                        | finalize       |
+   |  | Resolving |                        |                |
+   |  +-----------+                        |                |
+   |      |                                |                |
+   |      | on-chain computation           |                |
+   |      | completed                      |                |
+   |      v                                v                |
+   |  +------------+   finalize     +-----------+           |
+   |  | Firm       |--------------->| Finalized |           |
+   |  | Resolution |                +-----------+           |
+   |  +------------+                                        |
+   |                                                        |
+   +--------------------------------------------------------+
 
 
 

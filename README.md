@@ -1,5 +1,7 @@
 # Ethereum Computation Marketplace
 
+[![Documentation Status](https://readthedocs.org/projects/ethereum-computation-market/badge/?version=latest)](https://readthedocs.org/projects/ethereum-computation-market/?badge=latest)
+
 A semi-trustless on chain marketplace for purchasing the execution and result
 of expensive computation.
 
