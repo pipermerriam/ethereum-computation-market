@@ -34,6 +34,16 @@ contract BuildByteArrayFactory is TestFactory {
         var buildByteArray = new BuildByteArray(args);
         return address(buildByteArray);
     }
+
+    int constant STEP_GAS = 60000;
+
+    function totalGas(bytes args) constant returns(int) {
+        return STEP_GAS * int(args.length);
+    }
+
+    function stepGas(uint stepIdx, bytes args) constant returns(int) {
+        return STEP_GAS;
+    }
 }
 
 
@@ -83,8 +93,27 @@ contract Fibonacci is ExecutableBase, DunderUIntToBytes {
 
 
 contract FibonacciFactory is TestFactory {
+    using DunderBytes for bytes;
+
     function _build(bytes args) internal returns (address) {
         var fibonacci = new Fibonacci(args);
         return address(fibonacci);
+    }
+
+    int constant STEP_1_GAS = 100000;
+    int constant STEP_N_GAS = 80000;
+    int constant STEP_LAST_GAS = 66000;
+
+    function totalGas(bytes args) constant returns(int) {
+        int numSteps = int(args.toUInt());
+        if (numSteps == 1) return STEP_1_GAS;
+        return STEP_1_GAS + (numSteps - 1) * (STEP_N_GAS) + STEP_LAST_GAS;
+    }
+
+    function stepGas(uint stepIdx, bytes args) constant returns(int) {
+        var numSteps = args.toUInt();
+        if (stepIdx == 1) return STEP_1_GAS;
+        if (stepIdx > numSteps) return STEP_LAST_GAS;
+        return STEP_N_GAS;
     }
 }

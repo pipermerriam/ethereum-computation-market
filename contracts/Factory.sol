@@ -7,13 +7,9 @@ contract FactoryInterface {
     function isStateless() constant returns (bool);
 
     // return negative number to indicate unknown.
-    function totalGas() constant returns (int);
-    function totalGas(uint numSteps) constant returns(int);
     function totalGas(bytes args) constant returns(int);
 
     // return negative number to indicate unknown.
-    function stepGas() constant returns (int);
-    function stepGas(uint stepIdx) constant returns (int);
     function stepGas(uint stepIdx, bytes args) constant returns(int);
 }
 
@@ -45,13 +41,9 @@ contract FactoryBase is FactoryInterface {
     }
 
     // returning negative numbers indicates unknown.
-    function totalGas() constant returns (int) { return -1; }
-    function totalGas(uint numSteps) constant returns(int) { return -1; }
     function totalGas(bytes args) constant returns(int) { return -1; }
 
     // return negative number to indicate unknown.
-    function stepGas() constant returns (int) { return -1; }
-    function stepGas(uint stepIdx) constant returns (int) { return -1; }
     function stepGas(uint stepIdx, bytes args) constant returns(int) { return -1; }
 }
 

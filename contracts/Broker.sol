@@ -160,8 +160,15 @@ contract Broker is BrokerInterface, Accounting {
     uint _id;
 
     function getRequiredDeposit(bytes args) constant returns (uint) {
-        // TODO: this should come from the factory? or the executable?
-        return 10 ether;
+        int deposit;
+        deposit = factory.totalGas(args);
+
+        if (deposit >= 0) {
+            return uint(deposit);
+        }
+
+        // 500 maxed out transactions worth of gas.
+        return tx.gasprice * block.gaslimit * 500;
     }
 
     mapping (uint => Request) requests;
