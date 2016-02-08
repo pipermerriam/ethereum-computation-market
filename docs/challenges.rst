@@ -31,6 +31,23 @@ submission.  This minimum value is returned at the 9th index of the return
 value of ``getRequest``.
 
 
+Retrieve Challenge Answer
+^^^^^^^^^^^^^^^^^^^^^^^^^
+
+The data related to the challenge answer can be retrieved with the following
+functions::
+
+    function getChallengeAnswer(uint id) constant returns (bytes32 resultHash,
+                                                           address submitter,
+                                                           uint creationBlock,
+                                                           bool isVerified,
+                                                           uint depositAmount);
+    function getChallengeAnswerResult(uint id) constant returns (bytes);
+
+These two functions follow the same API and return values as the
+``getInitialAnswer`` and ``getInitialAnswerResult`` functions.
+
+
 Step 2: Initialize Dispute
 --------------------------
 
@@ -45,8 +62,8 @@ initialized with the inputs for this request.
 The gas costs for calling this function are fully reimbursed during execution.
 
 
-Step 3: Execute Computation
----------------------------
+Step 3: Computation & Resolution
+--------------------------------
 
 * ``function executeExecutable(uint id, uint nTimes) public returns (uint i, bool isFinished)``
 

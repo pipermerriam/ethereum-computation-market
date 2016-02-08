@@ -16,6 +16,7 @@ Contents:
     requests
     challenges
     execution_model
+    events
     :maxdepth: 2
 
 

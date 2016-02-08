@@ -81,13 +81,15 @@ contract BrokerInterface {
     function getInitialAnswer(uint id) constant returns (bytes32 resultHash,
                                                          address submitter,
                                                          uint creationBlock,
-                                                         bool isVerified);
+                                                         bool isVerified,
+                                                         uint depositAmount);
 
     function getInitialAnswerResult(uint id) constant returns (bytes);
     function getChallengeAnswer(uint id) constant returns (bytes32 resultHash,
                                                            address submitter,
                                                            uint creationBlock,
-                                                           bool isVerified);
+                                                           bool isVerified,
+                                                           uint depositAmount);
     function getChallengeAnswerResult(uint id) constant returns (bytes);
 
     function getRequiredDeposit(bytes args) constant returns (uint);
@@ -97,11 +99,11 @@ contract BrokerInterface {
      */
     event Created(uint id, bytes32 argsHash);
     event Cancelled(uint id);
-    event AnswerSubmitted(uint id, bytes32 resultHash);
-    event Execution(uint nTimes, bool isFinished);
-    event GasReimbursement(address to, uint value);
-    event Payment(address to, uint value);
-    event DepositReturned(address to, uint value);
+    event AnswerSubmitted(uint id, bytes32 resultHash, bool isChallenge);
+    event Execution(uint id, uint nTimes, bool isFinished);
+    event GasReimbursement(uint id, address to, uint value);
+    event Payment(uint id, address to, uint value);
+    event DepositReturned(uint id, address to, uint value);
 
     /*
      *  Public API
@@ -243,13 +245,15 @@ contract Broker is BrokerInterface, Accounting {
     function serializeAnswer(Answer answer) internal returns (bytes32 resultHash,
                                                               address submitter,
                                                               uint creationBlock,
-                                                              bool isVerified) {
+                                                              bool isVerified,
+                                                              uint depositAmount) {
         resultHash = answer.resultHash;
         submitter = answer.submitter;
         creationBlock = answer.creationBlock;
         isVerified = answer.isVerified;
+        depositAmount = answer.depositAmount;
 
-        return (resultHash, submitter, creationBlock, isVerified);
+        return (resultHash, submitter, creationBlock, isVerified, depositAmount);
     }
 
     function gasScalar(uint basePrice) constant returns (uint) {
@@ -301,7 +305,7 @@ contract Broker is BrokerInterface, Accounting {
         gasReimbursement = min(gasReimbursement, remainingGasFund(id));
 
         // Log it.
-        GasReimbursement(msg.sender, gasReimbursement);
+        GasReimbursement(request.id, msg.sender, gasReimbursement);
 
         if (sendRobust(msg.sender, gasReimbursement)) {
             request.gasReimbursements += gasReimbursement;
@@ -341,7 +345,8 @@ contract Broker is BrokerInterface, Accounting {
     function getInitialAnswer(uint id) constant returns (bytes32 resultHash,
                                                          address submitter,
                                                          uint creationBlock,
-                                                         bool isVerified) {
+                                                         bool isVerified,
+                                                         uint depositAmount) {
         var request = _getRequest(id);
 
         return serializeAnswer(request.initialAnswer);
@@ -354,7 +359,8 @@ contract Broker is BrokerInterface, Accounting {
     function getChallengeAnswer(uint id) constant returns (bytes32 resultHash,
                                                            address submitter,
                                                            uint creationBlock,
-                                                           bool isVerified) {
+                                                           bool isVerified,
+                                                           uint depositAmount) {
         var request = _getRequest(id);
 
         return serializeAnswer(request.challengeAnswer);
@@ -434,7 +440,7 @@ contract Broker is BrokerInterface, Accounting {
         request.status = Status.WaitingForResolution;
 
         // Log that a new answer was submitted.
-        AnswerSubmitted(id, request.initialAnswer.resultHash);
+        AnswerSubmitted(id, request.initialAnswer.resultHash, false);
     }
 
     function softResolveAnswer(uint id) public {
@@ -480,7 +486,7 @@ contract Broker is BrokerInterface, Accounting {
         request.status = Status.NeedsResolution;
 
         // Log that a new answer was submitted.
-        AnswerSubmitted(id, resultHash);
+        AnswerSubmitted(id, resultHash, true);
     }
 
     // TODO: derive this value
@@ -548,7 +554,7 @@ contract Broker is BrokerInterface, Accounting {
 
         isFinished = executable.isFinished();
 
-        Execution(i, isFinished);
+        Execution(request.id, i, isFinished);
 
         if (isFinished) {
             request.status = Status.FirmResolution;
@@ -612,7 +618,7 @@ contract Broker is BrokerInterface, Accounting {
 
         // Send the payment to the appropriate party.
         sendRobust(paymentTo, request.payment);
-        Payment(paymentTo, request.payment);
+        Payment(request.id, paymentTo, request.payment);
 
         // Update the status.
         request.status = Status.Finalized;
@@ -641,7 +647,7 @@ contract Broker is BrokerInterface, Accounting {
 
             // Send back their deposit.
             if (sendRobust(msg.sender, request.initialAnswer.depositAmount)) {
-                DepositReturned(msg.sender, request.initialAnswer.depositAmount);
+                DepositReturned(request.id, msg.sender, request.initialAnswer.depositAmount);
                 request.initialAnswer.depositAmount = 0;
             }
         }
@@ -664,7 +670,7 @@ contract Broker is BrokerInterface, Accounting {
 
             // Send back their deposit.
             if (sendRobust(msg.sender, request.challengeAnswer.depositAmount)) {
-                DepositReturned(msg.sender, request.challengeAnswer.depositAmount);
+                DepositReturned(request.id, msg.sender, request.challengeAnswer.depositAmount);
                 request.challengeAnswer.depositAmount = 0;
             }
         }

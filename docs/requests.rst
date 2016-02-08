@@ -126,6 +126,29 @@ amount can be gotten from the unsigned integer value at index 9 of the return
 value of ``getRequest``.
 
 
+Retrieve Answer
+^^^^^^^^^^^^^^^
+
+The data related to the submitted answer can be retrieved with the following
+functions::
+
+    function getInitialAnswer(uint id) constant returns (bytes32 resultHash,
+                                                         address submitter,
+                                                         uint creationBlock,
+                                                         bool isVerified,
+                                                         uint depositAmount);
+    function getInitialAnswerResult(uint id) constant returns (bytes);
+
+* ``bytes32 resultHash`` - The *sha3* of the submitted result.  This will be
+  ``0x0`` if no answer has been submitted.
+* ``address submitter`` - The address that submitted this answer.
+* ``creationBlock`` - The block number this answer was submitted on.
+* ``isVerified`` - Whether this answer was verified via on-chain computation.
+* ``depositAmount`` - The amount in wei that was is currently being held as a
+  deposit for this answer.  This amount will not reflect any gas reimbursment
+  charges that may be incurred due to an answer challenge situation.
+
+
 Soft Resolution
 ---------------
 
