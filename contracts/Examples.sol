@@ -40,10 +40,6 @@ contract BuildByteArrayFactory is TestFactory {
     function totalGas(bytes args) constant returns(int) {
         return STEP_GAS * int(args.length);
     }
-
-    function stepGas(uint stepIdx, bytes args) constant returns(int) {
-        return STEP_GAS;
-    }
 }
 
 
@@ -108,12 +104,5 @@ contract FibonacciFactory is TestFactory {
         int numSteps = int(args.toUInt());
         if (numSteps == 1) return STEP_1_GAS;
         return STEP_1_GAS + (numSteps - 1) * (STEP_N_GAS) + STEP_LAST_GAS;
-    }
-
-    function stepGas(uint stepIdx, bytes args) constant returns(int) {
-        var numSteps = args.toUInt();
-        if (stepIdx == 1) return STEP_1_GAS;
-        if (stepIdx > numSteps) return STEP_LAST_GAS;
-        return STEP_N_GAS;
     }
 }

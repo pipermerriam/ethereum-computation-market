@@ -353,14 +353,10 @@ previous step then this should return ``true``.  Otherwise it should return
 ``false``.
 
 
-TODO:  flesh out descriptions for these function::
+totalGas()
+""""""""""
 
-    // return negative number to indicate unknown.
-    function totalGas() constant returns (int);
-    function totalGas(uint numSteps) constant returns(int);
-    function totalGas(bytes args) constant returns(int);
+* ``function totalGas(bytes args) constant returns(int)``
 
-    // return negative number to indicate unknown.
-    function stepGas() constant returns (int);
-    function stepGas(uint stepIdx) constant returns (int);
-    function stepGas(uint stepIdx, bytes args) constant returns(int);
+Returns the total gas estimate in wei that would be required to compute the
+computation for the given input.

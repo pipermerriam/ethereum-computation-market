@@ -8,9 +8,6 @@ contract FactoryInterface {
 
     // return negative number to indicate unknown.
     function totalGas(bytes args) constant returns(int);
-
-    // return negative number to indicate unknown.
-    function stepGas(uint stepIdx, bytes args) constant returns(int);
 }
 
 
@@ -42,9 +39,6 @@ contract FactoryBase is FactoryInterface {
 
     // returning negative numbers indicates unknown.
     function totalGas(bytes args) constant returns(int) { return -1; }
-
-    // return negative number to indicate unknown.
-    function stepGas(uint stepIdx, bytes args) constant returns(int) { return -1; }
 }
 
 
