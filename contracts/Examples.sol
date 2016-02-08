@@ -1,17 +1,17 @@
 import {DunderBytes} from "libraries/DunderBytes.sol";
 import {DunderUIntToBytes} from "libraries/DunderUInt.sol";
-import {StatelessExecutable, ExecutableBase} from "contracts/Execution.sol";
-import {FactoryBase} from "contracts/Factory.sol";
+import {ExecutableBase} from "contracts/Execution.sol";
+import {StatelessFactory} from "contracts/Factory.sol";
 
 
-contract TestFactory is FactoryBase {
-    function TestFactory() FactoryBase("ipfs://test", "solc 9000", "--fake") {
+contract TestFactory is StatelessFactory {
+    function TestFactory() StatelessFactory("ipfs://test", "solc 9000", "--fake") {
     }
 }
 
 
-contract BuildByteArray is StatelessExecutable {
-    function BuildByteArray(bytes args) StatelessExecutable(args) {
+contract BuildByteArray is ExecutableBase {
+    function BuildByteArray(bytes args) ExecutableBase(args) {
     }
 
     function step(uint currentStep, bytes _state) public returns (bytes result, bool) {
@@ -37,10 +37,10 @@ contract BuildByteArrayFactory is TestFactory {
 }
 
 
-contract Fibonacci is StatelessExecutable, DunderUIntToBytes {
+contract Fibonacci is ExecutableBase, DunderUIntToBytes {
     using DunderBytes for bytes;
 
-    function Fibonacci(bytes args) StatelessExecutable(args) {
+    function Fibonacci(bytes args) ExecutableBase(args) {
     }
 
     function step(uint currentStep, bytes _state) public returns (bytes result, bool) {

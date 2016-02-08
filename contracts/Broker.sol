@@ -71,7 +71,8 @@ contract BrokerInterface {
                                                    uint creationBlock,
                                                    Status status,
                                                    uint payment,
-                                                   uint softResolutionBlocks);
+                                                   uint softResolutionBlocks,
+                                                   uint gasReimbursements);
     function getRequestArgs(uint id) constant returns (bytes result);
     function getRequestResult(uint id) constant returns (bytes result);
     function getInitialAnswer(uint id) constant returns (bytes32 resultHash,
@@ -94,6 +95,9 @@ contract BrokerInterface {
     event Created(uint id, bytes32 argsHash);
     event AnswerSubmitted(uint id, bytes32 resultHash);
     event Execution(uint nTimes, bool isFinished);
+    event GasReimbursement(address to, uint value);
+    event Payment(address to, uint value);
+    event DepositReturned(address to, uint value);
 
     /*
      *  Public API
@@ -192,7 +196,8 @@ contract Broker is BrokerInterface, Accounting {
                                                                  uint creationBlock,
                                                                  Status status,
                                                                  uint payment,
-                                                                 uint softResolutionBlocks) {
+                                                                 uint softResolutionBlocks,
+                                                                 uint gasReimbursements) {
         argsHash = request.argsHash;
         resultHash = request.resultHash;
         requester = request.requester;
@@ -201,9 +206,10 @@ contract Broker is BrokerInterface, Accounting {
         status = request.status;
         payment = request.payment;
         softResolutionBlocks = request.softResolutionBlocks;
+        gasReimbursements = request.gasReimbursements;
 
         return (argsHash, resultHash, requester, executable, creationBlock,
-                status, payment, softResolutionBlocks);
+                status, payment, softResolutionBlocks, gasReimbursements);
     }
 
     function serializeAnswer(Answer answer) internal returns (bytes32 resultHash,
@@ -259,8 +265,6 @@ contract Broker is BrokerInterface, Accounting {
         return b;
     }
 
-    event GasReimbursement(address to, uint value);
-
     function reimburseGas(uint id, address to, uint startGas, uint extraGas) internal {
         var request = requests[id];
         var gasReimbursement = gasScalar(request.baseGasPrice) * tx.gasprice / 100;
@@ -286,7 +290,8 @@ contract Broker is BrokerInterface, Accounting {
                                                    uint creationBlock,
                                                    Status status,
                                                    uint payment,
-                                                   uint softResolutionBlocks) {
+                                                   uint softResolutionBlocks,
+                                                   uint gasReimbursements) {
         var request = _getRequest(id);
 
         return serializeRequest(request);
@@ -557,6 +562,7 @@ contract Broker is BrokerInterface, Accounting {
 
         // Send the payment to the appropriate party.
         sendRobust(paymentTo, request.payment);
+        Payment(paymentTo, request.payment);
 
         // Update the status.
         request.status = Status.Finalized;
@@ -568,7 +574,6 @@ contract Broker is BrokerInterface, Accounting {
     }
 
     function reclaimDeposit(uint id) public {
-        // TODO: test this functionality.
         var request = requests[_getRequest(id).id];
 
         if (msg.sender == request.initialAnswer.submitter) {
@@ -589,10 +594,15 @@ contract Broker is BrokerInterface, Accounting {
 
             // Send back their deposit.
             if (sendRobust(msg.sender, request.initialAnswer.depositAmount)) {
+                DepositReturned(msg.sender, request.initialAnswer.depositAmount);
                 request.initialAnswer.depositAmount = 0;
             }
         }
-        else if (msg.sender == request.challengeAnswer.submitter) {
+
+        // This is intentionally not an `else if` because it would cause the
+        // challenger deposit to be unrecoverable if the same address was both
+        // submitter and challenger
+        if (msg.sender == request.challengeAnswer.submitter) {
             if (request.challengeAnswer.depositAmount == 0) return;
 
             if (request.challengeAnswer.resultHash != request.resultHash) {
@@ -607,6 +617,7 @@ contract Broker is BrokerInterface, Accounting {
 
             // Send back their deposit.
             if (sendRobust(msg.sender, request.challengeAnswer.depositAmount)) {
+                DepositReturned(msg.sender, request.challengeAnswer.depositAmount);
                 request.challengeAnswer.depositAmount = 0;
             }
         }

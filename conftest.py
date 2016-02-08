@@ -41,8 +41,12 @@ def deploy_broker_contract(contracts, deploy_contract, deploy_client):
 def get_log_data(deploy_client, contracts):
     def _get_log_data(event, txn_hash):
         event_logs = event.get_transaction_logs(txn_hash)
-        assert len(event_logs) == 1
-        event_data = event.get_log_data(event_logs[0])
+        assert len(event_logs)
+
+        if len(event_logs) == 1:
+            event_data = event.get_log_data(event_logs[0])
+        else:
+            event_data = tuple(event.get_log_data(l) for l in event_logs)
         return event_data
     return _get_log_data
 
@@ -76,7 +80,9 @@ def StatusEnum():
 @pytest.fixture
 def get_computation_request(deploy_client, get_log_data, StatusEnum, denoms):
     def _get_computation_request(broker, args="abcdefg", initial_answer=None,
+                                 initial_answer_deposit=None,
                                  soft_resolve=False, challenge_answer=None,
+                                 challenge_deposit=None,
                                  initialize_dispute=False,
                                  perform_execution=False, finalize=False):
         request_txn_hash = broker.requestExecution(args, value=10 * denoms.ether)
@@ -95,13 +101,26 @@ def get_computation_request(deploy_client, get_log_data, StatusEnum, denoms):
 
         assert deposit_amount > 0
 
-        i_answer_txn_hash = broker.answerRequest(_id, initial_answer, value=deposit_amount)
+        if initial_answer_deposit is None:
+            initial_answer_deposit = deposit_amount
+
+        i_answer_txn_hash = broker.answerRequest(
+            _id,
+            initial_answer,
+            value=initial_answer_deposit,
+        )
         i_answer_txn_receipt = deploy_client.wait_for_transaction(i_answer_txn_hash)
 
         assert broker.getRequest(_id)[5] == StatusEnum.WaitingForResolution
 
         if challenge_answer is not None:
-            c_answer_txn_hash = broker.challengeAnswer(_id, challenge_answer, value=deposit_amount)
+            if challenge_deposit is None:
+                challenge_deposit = deposit_amount
+            c_answer_txn_hash = broker.challengeAnswer(
+                _id,
+                challenge_answer,
+                value=challenge_deposit,
+            )
             c_answer_txn_receipt = deploy_client.wait_for_transaction(c_answer_txn_hash)
 
             assert broker.getRequest(_id)[5] == StatusEnum.NeedsResolution
@@ -119,7 +138,7 @@ def get_computation_request(deploy_client, get_log_data, StatusEnum, denoms):
 
                     assert broker.getRequest(_id)[5] == StatusEnum.FirmResolution
         elif soft_resolve:
-            soft_res_txn_h = broker.softResolveAnswer()
+            soft_res_txn_h = broker.softResolveAnswer(_id)
             soft_res_txn_r = deploy_client.wait_for_transaction(soft_res_txn_h)
 
             assert broker.getRequest(_id)[5] == StatusEnum.SoftResolution

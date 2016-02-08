@@ -1,7 +1,6 @@
 contract ExecutableInterface {
     // Must implement these functions.
     function step(uint currentStep, bytes _state) public returns (bytes result, bool);
-    function isStateless() constant returns (bool);
     function isFinished() constant returns (bool);
     function getOutputHash() constant returns (bytes32);
     function requestOutput(bytes4 sig) public returns (bool);
@@ -9,17 +8,6 @@ contract ExecutableInterface {
     function execute() public;
     function executeN() public returns (uint i);
     function executeN(uint nTimes) public returns (uint iTimes);
-
-    // TODO: move these to the Factory.
-    // return negative number to indicate unknown.
-    function totalGas() constant returns (int);
-    function totalGas(uint numSteps) constant returns(int);
-    function totalGas(bytes args) constant returns(int);
-
-    // return negative number to indicate unknown.
-    function stepGas() constant returns (int);
-    function stepGas(uint stepIdx) constant returns (int);
-    function stepGas(uint stepIdx, bytes args) constant returns(int);
 }
 
 
@@ -31,25 +19,9 @@ contract ExecutableBase is ExecutableInterface {
         input = _args;
     }
 
-    bool stateless;
-
-    function isStateless() constant returns (bool) {
-        return stateless;
-    }
-
     function isFinished() constant returns (bool) {
         return isFinal;
     }
-
-    // returning negative numbers indicates unknown.
-    function totalGas() constant returns (int) { return -1; }
-    function totalGas(uint numSteps) constant returns(int) { return -1; }
-    function totalGas(bytes args) constant returns(int) { return -1; }
-
-    // return negative number to indicate unknown.
-    function stepGas() constant returns (int) { return -1; }
-    function stepGas(uint stepIdx) constant returns (int) { return -1; }
-    function stepGas(uint stepIdx, bytes args) constant returns(int) { return -1; }
 
     // `input` is the initial arguments that will be passed into step-1 of
     // computation.
@@ -130,19 +102,5 @@ contract ExecutableBase is ExecutableInterface {
             }
         }
         return iTimes;
-    }
-}
-
-
-contract StatelessExecutable is ExecutableBase {
-    function StatelessExecutable(bytes _args) ExecutableBase(_args) {
-        stateless = true;
-    }
-}
-
-
-contract StatefulExecutable is ExecutableBase {
-    function StatefulExecutable(bytes _args) ExecutableBase(_args) {
-        stateless = false;
     }
 }

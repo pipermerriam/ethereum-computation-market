@@ -3,6 +3,18 @@ contract FactoryInterface {
     function _build(bytes args) internal returns (address);
 
     event Constructed(address addr, bytes32 argsHash);
+
+    function isStateless() constant returns (bool);
+
+    // return negative number to indicate unknown.
+    function totalGas() constant returns (int);
+    function totalGas(uint numSteps) constant returns(int);
+    function totalGas(bytes args) constant returns(int);
+
+    // return negative number to indicate unknown.
+    function stepGas() constant returns (int);
+    function stepGas(uint stepIdx) constant returns (int);
+    function stepGas(uint stepIdx, bytes args) constant returns(int);
 }
 
 
@@ -14,6 +26,8 @@ contract FactoryBase is FactoryInterface {
     // The compile flags used during compilation.
     string public compilerFlags;
 
+    bool public stateless;
+
     function FactoryBase(string _sourceURI, string _compilerVersion, string _compilerFlags) {
         sourceURI = _sourceURI;
         compilerVersion = _compilerVersion;
@@ -24,5 +38,35 @@ contract FactoryBase is FactoryInterface {
         addr = _build(args);
         Constructed(addr, sha3(args));
         return addr;
+    }
+
+    function isStateless() constant returns (bool) {
+        return stateless;
+    }
+
+    // returning negative numbers indicates unknown.
+    function totalGas() constant returns (int) { return -1; }
+    function totalGas(uint numSteps) constant returns(int) { return -1; }
+    function totalGas(bytes args) constant returns(int) { return -1; }
+
+    // return negative number to indicate unknown.
+    function stepGas() constant returns (int) { return -1; }
+    function stepGas(uint stepIdx) constant returns (int) { return -1; }
+    function stepGas(uint stepIdx, bytes args) constant returns(int) { return -1; }
+}
+
+
+contract StatelessFactory is FactoryBase {
+    function StatelessFactory(string _sourceURI, string _compilerVersion, string _compilerFlags)
+             FactoryBase(_sourceURI, _compilerVersion, _compilerFlags) {
+        stateless = true;
+    }
+}
+
+
+contract StatefulFactory is FactoryBase {
+    function StatefulFactory(string _sourceURI, string _compilerVersion, string _compilerFlags)
+             FactoryBase(_sourceURI, _compilerVersion, _compilerFlags) {
+        stateless = false;
     }
 }
