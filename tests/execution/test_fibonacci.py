@@ -33,7 +33,7 @@ def test_fibonacci_single_execution(deploy_client, contracts,
     ),
 )
 def test_fibonacci_looped_execution(deploy_client, contracts,
-                                    deploy_contract, idx, fib_n):
+                                    deploy_contract, idx, fib_n, math_tools):
     fib = deploy_contract(contracts.Fibonacci, (math_tools.int_to_bytes(idx),))
 
     assert fib.output() == ''
