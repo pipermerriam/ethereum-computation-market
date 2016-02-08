@@ -73,6 +73,7 @@ def StatusEnum():
         'SoftResolution': 4,
         'FirmResolution': 5,
         'Finalized': 6,
+        'Cancelled': 7,
     }
     return type("StatusEnum", (object,), enum_values)
 

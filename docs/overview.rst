@@ -41,6 +41,13 @@ the gas costs for the on-chain computation deducted.
     who requested the computation.
 
 
+Markets within the Marketplace
+------------------------------
+
+Each individual market within the overall marketplace is an implementation of a
+single algorithm.
+
+
 Computation Lifecycle
 ---------------------
 

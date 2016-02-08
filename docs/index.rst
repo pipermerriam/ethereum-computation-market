@@ -12,6 +12,8 @@ Contents:
 
     what
     overview
+    markets
+    requests
     execution_model
     :maxdepth: 2
 

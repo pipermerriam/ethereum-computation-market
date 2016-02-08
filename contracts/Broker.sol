@@ -36,7 +36,8 @@ contract BrokerInterface {
         Resolving,
         SoftResolution,
         FirmResolution,
-        Finalized
+        Finalized,
+        Cancelled
     }
 
     struct Request {
@@ -93,6 +94,7 @@ contract BrokerInterface {
      *  Events
      */
     event Created(uint id, bytes32 argsHash);
+    event Cancelled(uint id);
     event AnswerSubmitted(uint id, bytes32 resultHash);
     event Execution(uint nTimes, bool isFinished);
     event GasReimbursement(address to, uint value);
@@ -104,6 +106,9 @@ contract BrokerInterface {
      */
     // Request a computation to be done.
     function requestExecution(bytes args, uint softResolutionBlocks) public returns (uint);
+
+    // Cancel a request for computation.
+    function cancelRequest(uint id) public;
 
     // Submit an answer to a requested computation.
     function answerRequest(uint id, bytes result) public;
@@ -370,6 +375,22 @@ contract Broker is BrokerInterface, Accounting {
         Created(_id, request.argsHash);
 
         return _id;
+    }
+
+    function cancelRequest(uint id) public {
+        var request = requests[_getRequest(id).id];
+
+        // Check status
+        requireStatus(request.status, Status.Pending);
+
+        if (sendRobust(request.requester, request.payment)) {
+            // Return payment
+            request.payment = 0;
+            // Update the state
+            request.status = Status.Cancelled;
+        }
+
+        Cancelled(id);
     }
 
     function answerRequest(uint id, bytes result) public {
