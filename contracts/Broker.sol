@@ -28,6 +28,7 @@ contract BrokerInterface {
      *    on-chain implementation of the computation.
      *  - Finalized: This request has a result.  Deposits may now be returned
      *    and payment issued.
+     *  - Cancelled: The request has been cancelled.
      */
     enum Status {
         Pending,
@@ -73,7 +74,8 @@ contract BrokerInterface {
                                                    Status status,
                                                    uint payment,
                                                    uint softResolutionBlocks,
-                                                   uint gasReimbursements);
+                                                   uint gasReimbursements,
+                                                   uint requiredDeposit);
     function getRequestArgs(uint id) constant returns (bytes result);
     function getRequestResult(uint id) constant returns (bytes result);
     function getInitialAnswer(uint id) constant returns (bytes32 resultHash,
@@ -113,6 +115,9 @@ contract BrokerInterface {
     // Submit an answer to a requested computation.
     function answerRequest(uint id, bytes result) public;
 
+    // Resolve an unchallenged answer.
+    function softResolveAnswer(uint id) public;
+
     // Challenge the answer to a question.
     function challengeAnswer(uint id, bytes result) public;
 
@@ -124,6 +129,9 @@ contract BrokerInterface {
 
     // Finalize the result
     function finalize(uint id) public returns (bytes32);
+
+    // Answer submitters reclaim their deposits.
+    function reclaimDeposit(uint id) public;
 }
 
 
@@ -209,7 +217,8 @@ contract Broker is BrokerInterface, Accounting {
                                                                  Status status,
                                                                  uint payment,
                                                                  uint softResolutionBlocks,
-                                                                 uint gasReimbursements) {
+                                                                 uint gasReimbursements,
+                                                                 uint requiredDeposit) {
         argsHash = request.argsHash;
         resultHash = request.resultHash;
         requester = request.requester;
@@ -219,9 +228,11 @@ contract Broker is BrokerInterface, Accounting {
         payment = request.payment;
         softResolutionBlocks = request.softResolutionBlocks;
         gasReimbursements = request.gasReimbursements;
+        requiredDeposit = request.requiredDeposit;
 
         return (argsHash, resultHash, requester, executable, creationBlock,
-                status, payment, softResolutionBlocks, gasReimbursements);
+                status, payment, softResolutionBlocks, gasReimbursements,
+                requiredDeposit);
     }
 
     function serializeAnswer(Answer answer) internal returns (bytes32 resultHash,
@@ -303,7 +314,8 @@ contract Broker is BrokerInterface, Accounting {
                                                    Status status,
                                                    uint payment,
                                                    uint softResolutionBlocks,
-                                                   uint gasReimbursements) {
+                                                   uint gasReimbursements,
+                                                   uint requiredDeposit) {
         var request = _getRequest(id);
 
         return serializeRequest(request);
@@ -379,6 +391,8 @@ contract Broker is BrokerInterface, Accounting {
 
     function cancelRequest(uint id) public {
         var request = requests[_getRequest(id).id];
+
+        if (msg.sender != request.requester) throw;
 
         // Check status
         requireStatus(request.status, Status.Pending);
@@ -500,6 +514,11 @@ contract Broker is BrokerInterface, Accounting {
     function executeExecutable(uint id, uint nTimes) public returns (uint i, bool isFinished) {
         var startGas = msg.gas;
 
+        // TODO: should this error out if the gas is set too low?  Ideally
+        // there should be an incentive to have it advance the highest number
+        // of steps possible.  Maybe add a fixed number * numSteps to the gas
+        // reimbursment?
+
         var request = requests[_getRequest(id).id];
 
         // Check status
@@ -517,6 +536,8 @@ contract Broker is BrokerInterface, Accounting {
             i = executable.executeN();
 
             // Something is wrong.  It should have executed at least one round.
+            // TODO: what should we do if this happens multiple times?  What if
+            // it errors out completely and cannot advance at all?
             if (i == 0) throw;
         }
 
@@ -546,11 +567,7 @@ contract Broker is BrokerInterface, Accounting {
         }
     }
 
-    // TODO: derive this value
-    uint constant FINALIZE_GAS = 42000;
-
     function finalize(uint id) public returns (bytes32) {
-        var startGas = msg.gas;
         address paymentTo;
         var request = requests[_getRequest(id).id];
 
@@ -594,9 +611,6 @@ contract Broker is BrokerInterface, Accounting {
 
         // Update the status.
         request.status = Status.Finalized;
-
-        // reimburse for the gas that was used.
-        reimburseGas(request.id, msg.sender, startGas, FINALIZE_GAS);
 
         return request.resultHash;
     }

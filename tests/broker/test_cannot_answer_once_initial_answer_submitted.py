@@ -1,5 +1,6 @@
-import sha3
+import pytest
 
+from ethereum.tester import TransactionFailed
 
 deploy_contracts = [
     "BuildByteArrayFactory",
@@ -17,22 +18,14 @@ def test_submitting_initial_answer(deploy_client, deploy_broker_contract,
 
     _id = get_computation_request(
         broker, "abcdefg",
+        initial_answer=expected,
     )
 
-    assert broker.getRequest(_id)[5] == StatusEnum.Pending
+    assert broker.getRequest(_id)[5] == StatusEnum.WaitingForResolution
 
     deposit_amount = broker.getRequiredDeposit("abcdefg")
 
     assert deposit_amount > 0
 
-    answer_txn_hash = broker.answerRequest(_id, expected, value=deposit_amount)
-    answer_txn_receipt = deploy_client.wait_for_transaction(answer_txn_hash)
-
-    assert broker.getRequest(_id)[5] == StatusEnum.WaitingForResolution
-
-    answer_data = broker.getInitialAnswer(_id)
-
-    assert answer_data[0] == sha3.sha3_256(expected).digest()
-    assert answer_data[1] == deploy_coinbase
-    assert answer_data[2] == int(answer_txn_receipt['blockNumber'], 16)
-    assert answer_data[3] is False
+    with pytest.raises(TransactionFailed):
+        broker.answerRequest(_id, expected, value=deposit_amount)

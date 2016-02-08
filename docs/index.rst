@@ -14,6 +14,7 @@ Contents:
     overview
     markets
     requests
+    challenges
     execution_model
     :maxdepth: 2
 
