@@ -21,13 +21,14 @@ def test_cannot_answer_if_already_answered(deploy_client,
     _id = get_computation_request(
         broker, "abcdefg",
         initial_answer=expected,
+        challenge_answer="wrong",
     )
 
-    assert broker.getRequest(_id)[5] == StatusEnum.WaitingForResolution
+    assert broker.getRequest(_id)[5] == StatusEnum.NeedsResolution
 
-    deposit_amount = broker.getRequiredDeposit("abcdefg")
+    deposit_amount = broker.getRequiredDeposit("wrong")
 
     assert deposit_amount > 0
 
     with pytest.raises(TransactionFailed):
-        broker.answerRequest(_id, expected, value=deposit_amount)
+        broker.challengeAnswer(_id, "duplicate", value=deposit_amount)

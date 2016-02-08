@@ -163,6 +163,11 @@ contract Accounting {
 }
 
 
+/*
+ *  TODO:
+ *  - throw is possibly too harsh in some situations.  Consider returning
+ *    early instead. (must use throw on functions that require ether value)
+ */
 contract Broker is BrokerInterface, Accounting {
     FactoryInterface public factory;
 

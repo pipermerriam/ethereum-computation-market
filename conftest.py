@@ -98,7 +98,7 @@ def get_computation_request(deploy_client, get_log_data, StatusEnum, denoms):
         if initial_answer is None:
             return _id
 
-        deposit_amount = broker.getRequiredDeposit("abcdefg")
+        deposit_amount = broker.getRequest(_id)[6]
 
         assert deposit_amount > 0
 
