@@ -16,7 +16,9 @@ Contents:
     requests
     challenges
     execution_model
+    api
     events
+    changelog
     :maxdepth: 2
 
 

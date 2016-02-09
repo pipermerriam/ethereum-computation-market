@@ -37,8 +37,8 @@ The *Execution* contract is the actual implementation of the algorithm.  It can
 carry out one full on-chain execution of the computation.
 
 
-Risks
------
+Performing Computations
+-----------------------
 
 It is not safe to blindly participate as either the requester or fulfiller in a
 market.  The computation marketplace can provide a trustless wrapper around
