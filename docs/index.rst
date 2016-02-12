@@ -9,6 +9,7 @@ Welcome to Ethereum Computation Market's documentation!
 Contents:
 
 .. toctree::
+    :maxdepth: 1
 
     what
     overview
@@ -19,7 +20,6 @@ Contents:
     api
     events
     changelog
-    :maxdepth: 2
 
 
 
