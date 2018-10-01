@@ -67,7 +67,7 @@ StatelessExecutable and StatefulExecutable
 """"""""""""""""""""""""""""""""""""""""""
 
 * ``contracts/Execution/Execution.sol::StatelessExecutable``
-* ``contracts/Execution/Execution.sol::StatelessExecutable``
+* ``contracts/Execution/Execution.sol::StatefulExecutable``
 
 These abstract contracts can be used to implement **stateless** or **stateful**
 algorithms.  They only require implementating the ``step`` function from the
